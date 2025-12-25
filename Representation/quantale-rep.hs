@@ -193,5 +193,5 @@ main = do
 --   putStrLn "\n--- Child Program (Mutation) ---"
 --   putStrLn $ "Additive Mutation:  " ++ show (map ((\(Prob v) -> v) . childMutated) inputs)
 
---   logicExample
-    stringExample
+  logicExample
+    -- stringExample
