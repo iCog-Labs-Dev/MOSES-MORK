@@ -1,0 +1,13 @@
+.vscode/
+venv
+.venv
+__pycache__/
+
+myTest.metta
+todo
+tree-helper-registration-test.metta
+run_python_tests.py
+
+# Ignore HTML and Prolog files
+*.html
+*.pl

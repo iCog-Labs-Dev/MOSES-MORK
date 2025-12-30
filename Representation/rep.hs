@@ -1,0 +1,49 @@
+-- Program representation using S-expression syntax normally it 
+--  would either be a tree or nested cons list like representation.
+-- TODO: 
+--      1. Define the list of programs/population
+--      2. Define the variational and logical quantale
+--      3. Define the factor graph representation of the program
+-- class Quantale q where
+--   q_node :: Prog
+--   q_join :: q -> q -> q
+--   q_prod :: q -> q -> q
+--   q_res  :: q -> q -> q
+--   q_unit :: q
+---- q_node :: (prog -> q)
+-- Prog :: X -> q
+-- ID :: String
+-- Score :: Float
+-- - A program here is defined as a tuple of (Prog, ID, Score)
+--   where Prog is an S-Expression representing the program structure,
+--   ID is a unique identifier for the program, and Score is a fitness score.
+-- Program :: (Prog, ID, Score)
+--
+-- - Population is a list of Programs.
+-- Population :: [Program]
+--
+-- - Fitness function definition, which takes a program and returns its score.
+--   For our case it will be a boolean truth table acting as a lookup table.
+-- Fitness :: (Program -> Score)
+
+
+-- random psuedo-code 
+-- Given an initial exemplar X -> (AND) & and a simple fitness function of truth table
+--      True  ^ True  -> True
+--      True  ^ False -> False
+--      False ^ True  -> True
+--      False ^ False -> True
+-- and lables A, B & O (for output)
+-- Then Prog P0 X = instance Quantale where
+--                  q_node = X
+--                  q_join A B = A OR B
+--                  q_prod A B = A AND B
+--                  q_res  A = NOT A ;; during variational quantale this is termed as subtraction
+--                  q_unit = True
+--
+-- Then we can define a population of programs
+-- population = [P0, P1, P2, ..., Pn]
+--
+-- Next we can define a fitness function that evaluates each program
+-- fitness :: Program -> Score
+-- fitness (prog, id, score) = evaluate prog against truth table

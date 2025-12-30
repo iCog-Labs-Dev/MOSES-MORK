@@ -1,0 +1,29 @@
+name: MOSES-MORK CI
+
+on:
+  push:
+    branches:
+      - ref/POC
+      - main
+  pull_request:
+    branches:
+      - ref/POC
+      - main
+
+jobs:
+  setup-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+    
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+
+      - name: Run Unittest
+        run: |
+          python3 scripts/run_tests.py
