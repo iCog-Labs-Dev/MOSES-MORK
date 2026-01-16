@@ -1,6 +1,6 @@
 import csv
 import io
-from representation import knobs_from_truth_table 
+from .representation import knobs_from_truth_table 
 
 
 def load_truth_table(filepath, output_col='O'):
@@ -32,7 +32,10 @@ def load_truth_table(filepath, output_col='O'):
                 
     except FileNotFoundError:
         print(f"Error: File {filepath} not found.")
-        return []
+        return [], []
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return [], []
 
     return data_rows, output_values
 
