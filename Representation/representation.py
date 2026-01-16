@@ -144,7 +144,7 @@ class Deme(Quantale):
                 new_instance = sample_random_instances(parent, self.q_hyper)
                 self.instances.append(new_instance)
             
-            self.factor_graph = build_factor_graph_from_deme(self)
+            # self.factor_graph = build_factor_graph_from_deme(self)
         # TODO: have pattern miner to extract new dependencies between instances and update the factor graph
         #  also include pln for actions like probabilistic inference over the factor graph.
         return self.instances

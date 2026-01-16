@@ -250,13 +250,13 @@ data = [
 #     clean_pat = pattern.replace("GROUP", "list")
 #     print(f"{freq:<10} | {clean_pat}")
 
-print(f"--- Mining Dependencies (Factor Graph Edges) ---")
-dep_miner = DependencyMiner()
-dep_miner.fit(data)
-dependencies = dep_miner.get_meaningful_dependencies(min_freq=2)
+# print(f"--- Mining Dependencies (Factor Graph Edges) ---")
+# dep_miner = DependencyMiner()
+# dep_miner.fit(data)
+# dependencies = dep_miner.get_meaningful_dependencies(min_freq=2)
 
-print(f"\n{'PAIR (Sibling Relationship)':<30} | {'FREQ':<6} | {'PMI (Strength)':<10} | {'LIFT'}")
-print("-" * 65)
+# print(f"\n{'PAIR (Sibling Relationship)':<30} | {'FREQ':<6} | {'PMI (Strength)':<10} | {'LIFT'}")
+# print("-" * 65)
 
-for d in dependencies:
-    print(f"{d['pair']:<30} | {d['freq']:<6} | {d['PMI']:<10} | {d['Lift']}")
+# for d in dependencies:
+#     print(f"{d['pair']:<30} | {d['freq']:<6} | {d['PMI']:<10} | {d['Lift']}")
