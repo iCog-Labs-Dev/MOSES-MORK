@@ -5,45 +5,9 @@ from Representation.helpers import *
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Any, Callable
+from typing import List, Any, Callable, Dict, Tuple
 from copy import deepcopy
 import random
-
-class Factor:
-    """
-    A simple factor that connects a set of variables (Instances) and
-    optionally holds a potential function over them.
-    """
-    def __init__(
-        self,
-        variables: List["Instance"],
-        potential: Callable[[List["Instance"]], float] | None = None,
-        name: str | None = None,
-    ) -> None:
-        self.variables = variables
-        self.potential = potential
-        self.name = name or "factor"
-
-    def evaluate(self) -> float:
-        if self.potential is None:
-            return 1.0
-        return self.potential(self.variables)
-
-
-class FactorGraph:
-    def __init__(self, variables: List[Any], factors: List[Factor]) -> None:
-        self.variables = variables
-        self.factors = factors
-
-    def add_variable(self, var: Any) -> None:
-        self.variables.append(var)
-
-    def add_factor(self, factor: Factor) -> None:
-        self.factors.append(factor)
-
-    def neighbors(self, var: Any) -> List[Factor]:
-        """Return all factors that involve the given variable."""
-        return [f for f in self.factors if var in f.variables]
 
 
 class Quantale(ABC):
@@ -66,6 +30,65 @@ class Quantale(ABC):
     def unit(self):
         """Unit operation for the quantale."""
         pass
+
+
+class KnobVariable:
+    """
+    Represents a specific 'hole' or decision point in the program sketch.
+    Example: In (AND _ _), we have KnobVariable(0) and KnobVariable(1).
+    This is similar to a NilVertex in metta-moses.
+    """
+    def __init__(self, index: int, name: str, domain: List[str]):
+        self.index = index
+        self.name = name
+        self.domain = domain # Possible values e.g. ['A', 'B', 'NOT A']
+        self.value = None
+
+    def __repr__(self):
+        return f"Var({self.name})"
+
+
+class Factor:
+    """
+    Connects KnobVariables. 
+    The 'potential' function returns the probability (or PMI score) 
+    of a specific configuration of these variables.
+    """
+    def __init__(
+        self,
+        variables: List[KnobVariable],
+        potential_table: Dict[Tuple[str, ...], float],
+        name: str = "factor"
+    ):
+        self.variables = variables
+        self.potential_table = potential_table # The CPT (Conditional Prob Table)
+        self.name = name
+
+    def evaluate(self, assigned_values: List[str]) -> float:
+        """
+        Looks up the score for a specific set of values.
+        E.g., if Var1='A' and Var2='B', return 0.9.
+        """
+        key = tuple(assigned_values)
+        # Returning the PMI value for now.
+        # TODO: implement PLN's rule evaluation here. 
+        return self.potential_table.get(key, 0.001) 
+
+class FactorGraph(Quantale):
+    def __init__(self, variables: List[Any], factors: List[Factor]) -> None:
+        self.variables = variables
+        self.factors = factors
+
+    def add_variable(self, var: Any) -> None:
+        self.variables.append(var)
+
+    def add_factor(self, factor: Factor) -> None:
+        self.factors.append(factor)
+
+    def neighbors(self, var: Any) -> List[Factor]:
+        """Return all factors that involve the given variable."""
+        return [f for f in self.factors if var in f.variables]
+
 
 @dataclass
 class Knob:
@@ -121,7 +144,7 @@ class Deme(Quantale):
                 new_instance = sample_random_instances(parent, self.q_hyper)
                 self.instances.append(new_instance)
             
-            self.factor_graph = build_factor_graph_from_deme(self)
+            # self.factor_graph = build_factor_graph_from_deme(self)
         # TODO: have pattern miner to extract new dependencies between instances and update the factor graph
         #  also include pln for actions like probabilistic inference over the factor graph.
         return self.instances

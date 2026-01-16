@@ -1,5 +1,6 @@
 import collections
 import itertools
+import math
 
 
 class TreeNode:
@@ -81,7 +82,7 @@ class OrderedTreeMiner:
         # b) Include one of its subtrees
         
         # Generate cartesian product of children's possibilities
-        # We add [''] to represent "skipping this child"
+        # [''] means we're just skipping the child
         options_per_child = [[''] + group for group in child_subtree_groups]
         
         for combination in itertools.product(*options_per_child):
@@ -133,6 +134,93 @@ class OrderedTreeMiner:
         frequent = {k: v for k, v in self.patterns.items() if v >= self.min_support}
         return sorted(frequent.items(), key=lambda item: (-item[1], -len(item[0])))
 
+
+
+class DependencyMiner:
+    def __init__(self):
+        self.pair_counts = collections.defaultdict(int)
+        self.single_counts = collections.defaultdict(int)
+        self.total_contexts = 0 
+
+    def _get_canonical(self, node):
+        """Returns a string representation of a node (simplified for mining keys)."""
+        return str(node)
+
+    def fit(self, s_expressions):
+        """
+        Scans the trees specifically looking for SIBLING CO-OCCURRENCES.
+        This detects which knobs/arguments are coupled.
+        """
+        for expr in s_expressions:
+            tokens = tokenize(expr)
+            root = parse_sexpr(tokens)
+            
+            # BFS/DFS traversal to find every "Context" (Parent node)
+            queue = [root]
+            while queue:
+                current = queue.pop(0)
+                
+                # Only considering non-leaf nodes with multiple children as contexts
+                if not current.is_leaf() and len(current.children) > 1:
+                    self.total_contexts += 1
+                    
+                    child_keys = [self._get_canonical(c) for c in current.children]
+                    
+                    # Counting individual occurrences, which aviods duplicates (Mariginal).
+                    # We can also use the frequency
+                    seen_in_context = set()
+                    for k in child_keys:
+                        if k not in seen_in_context:
+                            self.single_counts[k] += 1
+                            seen_in_context.add(k)
+                    
+                    # Counting pairs
+                    for i in range(len(child_keys)):
+                        for j in range(i + 1, len(child_keys)):
+                            k1, k2 = child_keys[i], child_keys[j]
+                            if k1 > k2: k1, k2 = k2, k1 # Sort for consistency
+                            
+                            self.pair_counts[(k1, k2)] += 1
+                
+                queue.extend(current.children)
+        return self
+
+    def get_meaningful_dependencies(self, min_pmi=0.1, min_freq=2):
+        """
+        Calculates PMI for all pairs and returns the most 'meaningful' ones.
+        """
+        results = []
+        total = self.total_contexts
+        
+        for (k1, k2), pair_count in self.pair_counts.items():
+            if pair_count < min_freq:
+                continue
+                
+            count_k1 = self.single_counts[k1]
+            count_k2 = self.single_counts[k2]
+            
+            p_x = count_k1 / total
+            p_y = count_k2 / total
+            p_xy = pair_count / total
+            
+            # PMI Formula: log( P(x,y) / (P(x)*P(y)) )
+            # We add a tiny epsilon to avoid division by zero
+            try:
+                lift = p_xy / (p_x * p_y)
+                pmi = math.log2(lift)
+            except:
+                pmi = 0.0
+            
+            if pmi >= min_pmi:
+                results.append({
+                    "pair": f"{k1} -- {k2}",
+                    "freq": pair_count,
+                    "PMI": round(pmi, 3),
+                    "Lift": round(lift, 2)
+                })
+        
+        return sorted(results, key=lambda x: x['PMI'], reverse=True)
+
 data = [
     "(AND A B C)",
     "(AND (NOT A) B C)",
@@ -148,16 +236,27 @@ data = [
     "(AND (NOT B) (NOT C))"
 ]
 
-print(f"--- Processing {len(data)} S-Expressions ---")
+# print(f"--- Processing {len(data)} S-Expressions ---")
 
-miner = OrderedTreeMiner(min_support=4)
-miner.fit(data)
-results = miner.get_frequent_patterns()
+# miner = OrderedTreeMiner(min_support=4)
+# miner.fit(data)
+# results = miner.get_frequent_patterns()
 
-print(f"\n{'FREQUENCY':<10} | {'PATTERN (S-Expression)'}")
-print("-" * 50)
+# print(f"\n{'FREQUENCY':<10} | {'PATTERN (S-Expression)'}")
+# print("-" * 50)
 
 
-for pattern, freq in results:
-    clean_pat = pattern.replace("GROUP", "list")
-    print(f"{freq:<10} | {clean_pat}")
+# for pattern, freq in results:
+#     clean_pat = pattern.replace("GROUP", "list")
+#     print(f"{freq:<10} | {clean_pat}")
+
+# print(f"--- Mining Dependencies (Factor Graph Edges) ---")
+# dep_miner = DependencyMiner()
+# dep_miner.fit(data)
+# dependencies = dep_miner.get_meaningful_dependencies(min_freq=2)
+
+# print(f"\n{'PAIR (Sibling Relationship)':<30} | {'FREQ':<6} | {'PMI (Strength)':<10} | {'LIFT'}")
+# print("-" * 65)
+
+# for d in dependencies:
+#     print(f"{d['pair']:<30} | {d['freq']:<6} | {d['PMI']:<10} | {d['Lift']}")
