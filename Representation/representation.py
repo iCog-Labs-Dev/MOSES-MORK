@@ -209,7 +209,19 @@ def sample_random_instances(instance: Instance, hyperparams: Hyperparams) -> Ins
             knob.symbol = f"(NOT {knob.symbol})"
             child.value = replace_one_symbol(child.value, old_symbol, knob.symbol)
     return child
+def sample_uniform_random_instances(program_sketch: str, knobs: List[Knob],instance_id=1) -> Instance:
 
+    expr=program_sketch
+    for knob in knobs:
+        expr=add_arg(expr,knob.symbol)
+    
+    for knob in knobs:
+        if random.random() < 0.5:
+            expr=exclude_one_symbol(expr,knob.symbol)
+
+    return Instance(value=expr,id=instance_id,score=0.0,knobs=knobs)    
+
+  
 def knobs_from_truth_table(ITable: List[dict]) -> List[Knob]:
     """
     Given a truth table (list of dict rows), extract:

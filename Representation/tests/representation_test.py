@@ -1,8 +1,10 @@
 import unittest
+import random
 from Representation.representation import (
     knobs_from_truth_table,
     initialize_deme,
     sample_random_instances,
+    sample_uniform_random_instances,
     # select_top_k,
     build_factor_graph_from_deme,
     Instance,
@@ -48,6 +50,16 @@ class TestExp(unittest.TestCase):
         child = sample_random_instances(parent, hyper)
         self.assertNotEqual(child.id, parent.id)
         self.assertIn("(NOT X)", child.value)
+
+    def test_sample_uniform_random_instances(self):
+        knobs=knobs_from_truth_table(self.ITable)
+        random.seed(42)
+        inst=sample_uniform_random_instances(self.sketch,knobs,instance_id=42)
+        self.assertEqual(inst.id,42)
+        self.assertEqual(inst.value , "(AND A)")
+       
+        self.assertFalse("$" in inst.value)
+
 
 
     # def test_build_factor_graph(self):
