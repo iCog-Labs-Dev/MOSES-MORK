@@ -115,7 +115,7 @@ def sample_new_instances(p: float, hyperparams: Hyperparams, instance: Instance,
         knobs (List): List of knob objects to sample from.
         
     Returns:
-        A list of newly generated instances.
+        A dict of newly generated instances.
     """
     new_instances = {}
     for _ in range(hyperparams.neighborhood_size):
