@@ -29,7 +29,7 @@ class TestSelection(unittest.TestCase):
             i1 = Instance(value="(AND A)", id=1, score=0.9, knobs=[kA])
             i2 = Instance(value="(AND A B)", id=2, score=0.6, knobs=[kA, kB])
             i3 = Instance(value="(AND A B C)", id=3, score=0.4, knobs=[kA, kB, kC])
-            deme = Deme([i1, i2, i3], "Deme-01", Hyperparams(0.1, 0.1))
+            deme = Deme([i1, i2, i3], "Deme-01", Hyperparams(0.1, 0.1, 10, 5))
             
             top = select_top_k(deme, k=2)
             self.assertEqual(len(top), 2)
@@ -44,7 +44,7 @@ class TestSelection(unittest.TestCase):
         i1 = Instance(value="(AND A)", id=1, score=0.9, knobs=[kA])
         i2 = Instance(value="(AND A B)", id=2, score=0.6, knobs=[kA, kB])
         i3 = Instance(value="(AND A B C)", id=3, score=0.4, knobs=[kA, kB, kC])
-        deme = Deme([i1, i2, i3], "Deme-01", Hyperparams(0.1, 0.1))
+        deme = Deme([i1, i2, i3], "Deme-01", Hyperparams(0.1, 0.1, 10, 5))
 
         selected = tournament_selection(deme, k=2, tournament_size=2)
         self.assertEqual(len(selected), 2)

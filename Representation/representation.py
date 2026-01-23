@@ -108,6 +108,8 @@ class Instance:
 class Hyperparams:
     mutation_rate: float
     crossover_rate: float
+    num_generations: int
+    neighborhood_size: int
 
 class Deme(Quantale):
     def __init__(self, instances: List[Instance], id: str, q_hyper: Hyperparams) -> None:
@@ -185,7 +187,7 @@ def initialize_deme(program_sketch: str, ITable: List[dict]) -> Deme:
     """
     knobs = knobs_from_truth_table(ITable)
     instances = [Instance(value=program_sketch, id=1, score=0.0, knobs=knobs)]
-    hyperparams = Hyperparams(mutation_rate=0.1, crossover_rate=0.6)
+    hyperparams = Hyperparams(mutation_rate=0.1, crossover_rate=0.6, num_generations=50, neighborhood_size=10)
     deme = Deme(instances=instances, id="deme-00", q_hyper=hyperparams)
     deme.construct()
     return deme
@@ -209,17 +211,6 @@ def sample_random_instances(instance: Instance, hyperparams: Hyperparams) -> Ins
             knob.symbol = f"(NOT {knob.symbol})"
             child.value = replace_one_symbol(child.value, old_symbol, knob.symbol)
     return child
-def sample_uniform_random_instances(program_sketch: str, knobs: List[Knob],instance_id=1) -> Instance:
-
-    expr=program_sketch
-    for knob in knobs:
-        expr=add_arg(expr,knob.symbol)
-    
-    for knob in knobs:
-        if random.random() < 0.5:
-            expr=exclude_one_symbol(expr,knob.symbol)
-
-    return Instance(value=expr,id=instance_id,score=0.0,knobs=knobs)    
 
   
 def knobs_from_truth_table(ITable: List[dict]) -> List[Knob]:
