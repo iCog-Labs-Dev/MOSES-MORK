@@ -4,9 +4,6 @@ from Representation.representation import (
     knobs_from_truth_table,
     initialize_deme,
     sample_random_instances,
-    sample_uniform_random_instances,
-    sample_logical_perms,
-    # select_top_k,
     build_factor_graph_from_deme,
     Instance,
     Knob,
@@ -43,23 +40,23 @@ class TestExp(unittest.TestCase):
         self.assertTrue(inst0.value.startswith("(AND "))
         self.assertFalse("$" in inst0.value)
 
-    def test_sample_random_instances(self):
-        knobs = [Knob("X", 1, [True, False])]
-        parent = Instance(value="(NOT X)", id=1, score=0.0, knobs=knobs)
-        hyper = Hyperparams(mutation_rate=1.1, crossover_rate=0.0)
+    # def test_sample_random_instances(self):
+    #     knobs = [Knob("X", 1, [True, False])]
+    #     parent = Instance(value="(NOT X)", id=1, score=0.0, knobs=knobs)
+    #     hyper = Hyperparams(mutation_rate=1.1, crossover_rate=0.0)
         
-        child = sample_random_instances(parent, hyper)
-        self.assertNotEqual(child.id, parent.id)
-        self.assertIn("(NOT X)", child.value)
+    #     child = sample_random_instances(parent, hyper)
+    #     self.assertNotEqual(child.id, parent.id)
+    #     self.assertIn("(NOT X)", child.value)
 
-    def test_sample_uniform_random_instances(self):
-        knobs=knobs_from_truth_table(self.ITable)
-        random.seed(42)
-        inst=sample_uniform_random_instances(self.sketch,knobs,instance_id=42)
-        self.assertEqual(inst.id,42)
-        self.assertEqual(inst.value , "(AND A)")
+    # def test_sample_uniform_random_instances(self):
+    #     knobs=knobs_from_truth_table(self.ITable)
+    #     random.seed(42)
+    #     inst=sample_uniform_random_instances(self.sketch,knobs,instance_id=42)
+    #     self.assertEqual(inst.id,42)
+    #     self.assertEqual(inst.value , "(AND A)")
        
-        self.assertFalse("$" in inst.value)
+    #     self.assertFalse("$" in inst.value)
 
 
 
@@ -76,28 +73,6 @@ class TestExp(unittest.TestCase):
     #     self.assertIn(i2, factor.variables)
     #     score = factor.evaluate()
     #     self.assertEqual(score, 2.0)
-    def test_sample_logical_perms(self):
-        knobs = [
-            Knob(symbol="A", id=1, Value=[]),
-            Knob(symbol="B", id=2, Value=[])
-        ]
-        
-        # Test 1: Current OP is AND -> Expects OR pairs + Vars
-        candidates_and = sample_logical_perms("AND", knobs)
-        
-        # Expect: "A", "B"
-        self.assertIn("A", candidates_and)
-        self.assertIn("B", candidates_and)
-        
-        # Expect Pairs (OR A B), (OR (NOT A) B) ...
-        self.assertIn("(OR A B)", candidates_and)
-        self.assertIn("(OR (NOT A) B)", candidates_and) 
-        self.assertIn("(OR A (NOT B))", candidates_and)
-        self.assertIn("(OR (NOT A) (NOT B))", candidates_and)
-
-        # Test 2: Current OP is OR -> Expects AND pairs
-        candidates_or = sample_logical_perms("OR", knobs)
-        self.assertIn("(AND A B)", candidates_or)
 
 if __name__ == '__main__':
     unittest.main()

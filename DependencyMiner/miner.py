@@ -1,57 +1,9 @@
+from Representation.helpers import TreeNode, parse_sexpr, tokenize
+
 import collections
 import itertools
 import math
 
-
-class TreeNode:
-    def __init__(self, label):
-        self.label = label
-        self.children = []
-
-    def add_child(self, node):
-        self.children.append(node)
-
-    def is_leaf(self):
-        return len(self.children) == 0
-
-    def __repr__(self):
-        # Canonical string representation (DFS Pre-order)
-        if self.is_leaf():
-            return self.label
-        child_strs = " ".join([str(c) for c in self.children])
-        return f"({self.label} {child_strs})"
-
-def tokenize(s_expr):
-    """Converts s-expression string into a list of significant tokens."""
-    return s_expr.replace('(', ' ( ').replace(')', ' ) ').split()
-
-def parse_sexpr(tokens):
-    """
-    Recursive parser that converts tokens into a TreeNode hierarchy.
-    Handles standard (HEAD TAIL) and list-grouping ((...)) structures.
-    """
-    if len(tokens) == 0:
-        raise ValueError("Unexpected end of input")
-    
-    token = tokens.pop(0)
-    
-    if token == '(':
-        if tokens[0] == '(':
-            #((NOT A) B) -> No explicit label, treated as implicit 'GROUP'
-            node = TreeNode("GROUP") 
-        else:
-            node = TreeNode(tokens.pop(0))
-        
-        while tokens[0] != ')':
-            node.add_child(parse_sexpr(tokens))
-        
-        tokens.pop(0)
-        return node
-    elif token == ')':
-        raise ValueError("Unexpected )")
-    else:
-        # If the token is a leaf node/literal's liek A, B ...
-        return TreeNode(token)
 
 
 class OrderedTreeMiner:
@@ -221,42 +173,3 @@ class DependencyMiner:
         
         return sorted(results, key=lambda x: x['PMI'], reverse=True)
 
-data = [
-    "(AND A B C)",
-    "(AND (NOT A) B C)",
-    "(AND A (NOT B) C)",
-    "(AND (NOT A) (OR (NOT B) C))",
-    "(AND A (OR C B))",
-    "(AND (OR (NOT A) C) B)",
-    "(AND A (NOT C) B)",
-    "(AND (NOT A) (OR (NOT C) B))",
-    "(AND B C)",
-    "(AND (NOT B) C)",
-    "(AND B (NOT C))",
-    "(AND (NOT B) (NOT C))"
-]
-
-# print(f"--- Processing {len(data)} S-Expressions ---")
-
-# miner = OrderedTreeMiner(min_support=4)
-# miner.fit(data)
-# results = miner.get_frequent_patterns()
-
-# print(f"\n{'FREQUENCY':<10} | {'PATTERN (S-Expression)'}")
-# print("-" * 50)
-
-
-# for pattern, freq in results:
-#     clean_pat = pattern.replace("GROUP", "list")
-#     print(f"{freq:<10} | {clean_pat}")
-
-# print(f"--- Mining Dependencies (Factor Graph Edges) ---")
-# dep_miner = DependencyMiner()
-# dep_miner.fit(data)
-# dependencies = dep_miner.get_meaningful_dependencies(min_freq=2)
-
-# print(f"\n{'PAIR (Sibling Relationship)':<30} | {'FREQ':<6} | {'PMI (Strength)':<10} | {'LIFT'}")
-# print("-" * 65)
-
-# for d in dependencies:
-#     print(f"{d['pair']:<30} | {d['freq']:<6} | {d['PMI']:<10} | {d['Lift']}")
