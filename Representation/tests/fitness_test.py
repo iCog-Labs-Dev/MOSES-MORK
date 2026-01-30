@@ -18,7 +18,6 @@ class TestFitnessOracle(unittest.TestCase):
         self.knobs = [
             Knob(symbol="A", id=1, Value=[False, False, True, True]),
             Knob(symbol="B", id=2, Value=[False, True, False, True]),
-            # Knob(symbol="O", id=3, Value=[False, False, False, True])
         ]
         
         self.oracle = FitnessOracle([False, False, False, True])

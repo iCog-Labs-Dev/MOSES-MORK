@@ -6,11 +6,13 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from Representation.helpers import TreeNode, parse_sexpr, tokenize, isOP
 from Representation.representation import (Instance, Knob,
                                            Deme, Hyperparams,
+                                           FitnessOracle,
                                            knobs_from_truth_table)
 from Representation.csv_parser import load_truth_table
 
 from Feature_selection_algo.interaction_mrmr import interaction_aware_mrmr, feature_order
-
+from reduct.enf.main import reduce
+from hyperon import MeTTa
 import csv
 from typing import List, Dict
 from copy import deepcopy
@@ -196,7 +198,7 @@ def sample_new_instances(p: float, hyperparams: Hyperparams, instance: Instance,
     return new_instances
 
 
-def sample_from_TTable(csv_path: str, hyperparams: Hyperparams, exemplar: Instance, output_col: str = 'O'):
+def sample_from_TTable(csv_path: str, hyperparams: Hyperparams, exemplar: Instance, knobs: List[Knob], target_vals: List[bool] ,output_col: str = 'O'):
     """
     Samples demes from a truth table CSV file using interaction-aware mRMR feature selection.
     Args:
@@ -215,17 +217,26 @@ def sample_from_TTable(csv_path: str, hyperparams: Hyperparams, exemplar: Instan
         max_interaction_order=order,
         output_type='subsets'
     )
-    
-    try:
-        knobs = knobs_from_truth_table(load_truth_table(csv_path, 'O')[0])
-    except Exception as e:
-        print(f"Error generating knobs from truth table: {e}")
-        return []
-        
+
     demes = []
+    metta = MeTTa()
+    fitness = FitnessOracle(target_vals)
+
     for feat in features:
         selected_features = [k for k in knobs if k.symbol in (feat if isinstance(feat, (list, tuple)) else [feat])]
         instances = sample_new_instances(0.5, hyperparams, exemplar, selected_features, exemplar.knobs)
-        demes.append(Deme(instances=list(instances.values()), id=(len(demes)), q_hyper=hyperparams))
+        unique_instances = {}
+        for inst in instances.values():
+            reduced = str(reduce(metta, inst.value))
+            inst.value = reduced
+
+            present_tokens = set(tokenize(inst.value))
+            inst.knobs = [k for k in inst.knobs if k.symbol in present_tokens]
+
+            inst.score = fitness.get_fitness(inst)
+            if inst.value not in unique_instances:
+                unique_instances[inst.value] = inst
+            
+        demes.append(Deme(instances=list(unique_instances.values()), id=(len(demes)), q_hyper=hyperparams))
         
     return demes

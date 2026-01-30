@@ -6,7 +6,7 @@ from Representation.sampling import (randomUniform, randomBernoulli,
                                      sample_from_TTable)
 from Representation.representation import (Instance, Knob, Deme,
                                            Hyperparams, knobs_from_truth_table)
-from Representation.csv_parser import load_truth_table 
+from Representation.csv_parser import load_truth_table
 from Representation.helpers import TreeNode, parse_sexpr, tokenize, isOP
 
 class TestRandomUniform(unittest.TestCase):
@@ -218,7 +218,7 @@ class TestSampleFromTTable(unittest.TestCase):
         self.test_csv_path = "example_data/test_bin.csv"
 
         # Build exemplar from this table
-        tt, _ = load_truth_table(self.test_csv_path, "O")
+        tt, target_vals = load_truth_table(self.test_csv_path, "O")
         knobs = knobs_from_truth_table(tt)
         # Simple exemplar: AND over all input knobs (A..F)
         expr = "(AND " + " ".join(k.symbol for k in knobs) + ")"
@@ -229,6 +229,8 @@ class TestSampleFromTTable(unittest.TestCase):
             neighborhood_size=5,
             num_generations=10,
         )
+        self.target_vals = target_vals
+        self.knobs = knobs
 
     def test_sample_from_TTable_basic_structure(self):
         random.seed(0)
@@ -236,6 +238,8 @@ class TestSampleFromTTable(unittest.TestCase):
             self.test_csv_path,
             self.hyperparams,
             self.exemplar,
+            self.knobs,
+            self.target_vals,
             output_col="O",
         )
         # Returns list of Deme
@@ -256,6 +260,8 @@ class TestSampleFromTTable(unittest.TestCase):
             self.test_csv_path,
             self.hyperparams,
             self.exemplar,
+            self.knobs,
+            self.target_vals,
             output_col="O",
         )
         for deme in demes:
@@ -270,10 +276,27 @@ class TestSampleFromTTable(unittest.TestCase):
             "non_existent_file.csv",
             self.hyperparams,
             self.exemplar,
+            self.knobs,
+            self.target_vals,
             output_col="O",
         )
         # On error it should return an empty list
         self.assertEqual(demes, [])
+    
+    def test_scored_instances(self):
+        random.seed(3)
+        demes = sample_from_TTable(
+            self.test_csv_path,
+            self.hyperparams,
+            self.exemplar,
+            self.knobs,
+            self.target_vals,
+            output_col="O",
+        )
+        for deme in demes:
+            for inst in deme.instances:
+                self.assertIsInstance(inst.score, float)
+                self.assertGreater(inst.score, 0)
 
 
 
