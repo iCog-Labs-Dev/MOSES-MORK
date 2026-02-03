@@ -5,6 +5,9 @@ import itertools
 import math
 
 
+def sigmoid(x, k=1.0):
+    """Squashes any number into the [0, 1] interval."""
+    return 1 / (1 + math.exp(-k * x))
 
 class OrderedTreeMiner:
     def __init__(self, min_support=2):
@@ -87,23 +90,29 @@ class OrderedTreeMiner:
         return sorted(frequent.items(), key=lambda item: (-item[1], -len(item[0])))
 
 
+# The PMI score of should be weighted by the fitness score of the instances.
 
 class DependencyMiner:
     def __init__(self):
         self.pair_counts = collections.defaultdict(int)
         self.single_counts = collections.defaultdict(int)
-        self.total_contexts = 0 
+        self.pair_weights = collections.defaultdict(float)
+        self.single_weights = collections.defaultdict(float)
+        self.total_weighted_contexts = 0.0
+        self.total_count = 0
 
     def _get_canonical(self, node):
         """Returns a string representation of a node (simplified for mining keys)."""
         return str(node)
 
-    def fit(self, s_expressions):
+    def fit(self, s_expressions, weights):
         """
         Scans the trees specifically looking for SIBLING CO-OCCURRENCES.
         This detects which knobs/arguments are coupled.
         """
-        for expr in s_expressions:
+        for expr, weight in zip(s_expressions, weights):
+            if weight <= 0: continue
+
             tokens = tokenize(expr)
             root = parse_sexpr(tokens)
             
@@ -114,7 +123,8 @@ class DependencyMiner:
                 
                 # Only considering non-leaf nodes with multiple children as contexts
                 if not current.is_leaf() and len(current.children) > 1:
-                    self.total_contexts += 1
+                    self.total_weighted_contexts += weight
+                    self.total_count += 1
                     
                     child_keys = [self._get_canonical(c) for c in current.children]
                     
@@ -123,6 +133,7 @@ class DependencyMiner:
                     seen_in_context = set()
                     for k in child_keys:
                         if k not in seen_in_context:
+                            self.single_weights[k] += weight
                             self.single_counts[k] += 1
                             seen_in_context.add(k)
                     
@@ -132,28 +143,35 @@ class DependencyMiner:
                             k1, k2 = child_keys[i], child_keys[j]
                             if k1 > k2: k1, k2 = k2, k1 # Sort for consistency
                             
+                            self.pair_weights[(k1, k2)] += weight
                             self.pair_counts[(k1, k2)] += 1
                 
                 queue.extend(current.children)
         return self
 
-    def get_meaningful_dependencies(self, min_pmi=0.1, min_freq=2):
+    def get_meaningful_dependencies(self, min_pmi=0.1, min_weight=0.01, min_freq=2):
         """
         Calculates PMI for all pairs and returns the most 'meaningful' ones.
         """
         results = []
-        total = self.total_contexts
+        total = self.total_weighted_contexts
         
-        for (k1, k2), pair_count in self.pair_counts.items():
-            if pair_count < min_freq:
+        for ((k1, k2), pair_count), ((k1,k2), pair_weight) in zip(self.pair_counts.items(), self.pair_weights.items()):
+            if pair_count < min_freq or pair_weight < min_weight:
                 continue
                 
             count_k1 = self.single_counts[k1]
             count_k2 = self.single_counts[k2]
+
+            weight_k1 = self.single_weights[k1]
+            weight_k2 = self.single_weights[k2]
             
-            p_x = count_k1 / total
-            p_y = count_k2 / total
-            p_xy = pair_count / total
+            # p_x = count_k1 / total
+            # p_y = count_k2 / total
+            # p_xy = pair_count / total
+            p_x = weight_k1 / total
+            p_y = weight_k2 / total
+            p_xy = pair_weight / total
             
             # PMI Formula: log( P(x,y) / (P(x)*P(y)) )
             # We add a tiny epsilon to avoid division by zero
@@ -167,7 +185,10 @@ class DependencyMiner:
                 results.append({
                     "pair": f"{k1} -- {k2}",
                     "freq": pair_count,
+                    "weighted_freq": round(pair_weight, 4),
                     "PMI": round(pmi, 3),
+                    "strength": round(sigmoid(pmi), 3),
+                    "confidence": round(p_xy, 4),
                     "Lift": round(lift, 2)
                 })
         

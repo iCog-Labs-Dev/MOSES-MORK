@@ -1,4 +1,4 @@
-import hyperon
+from hyperon import *
 
 # from ..reduct.enf.main import reduce
 from Representation.helpers import *

@@ -227,8 +227,13 @@ def sample_from_TTable(csv_path: str, hyperparams: Hyperparams, exemplar: Instan
         instances = sample_new_instances(0.5, hyperparams, exemplar, selected_features, exemplar.knobs)
         unique_instances = {}
         for inst in instances.values():
-            reduced = str(reduce(metta, inst.value))
-            inst.value = reduced
+            reduced = reduce(metta, inst.value)
+            # inst.value = reduced
+            if isinstance(reduced, list) and len(reduced) > 0:
+                inst.value = str(reduced[0])
+            else:
+                inst.value = str(reduced)
+
 
             present_tokens = set(tokenize(inst.value))
             inst.knobs = [k for k in inst.knobs if k.symbol in present_tokens]
