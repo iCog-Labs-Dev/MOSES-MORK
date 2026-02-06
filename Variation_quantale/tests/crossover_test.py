@@ -46,11 +46,11 @@ class TestVariationQuantale(unittest.TestCase):
 
         # Fixed STV values to make mask probabilities predictable-ish
         self.stv_values = {
-            "A": (0.9, 0.9),          # likely included
-            "B": (0.8, 0.8),          # likely included
-            "C": (0.2, 0.2),          # less likely
-            "D": (0.5, 0.5),          # 0.5 probability
-            "(OR C D)": (0.7, 0.7),   # for the nested expression
+            "A": (0.9, 0.9),          
+            "B": (0.8, 0.8),          
+            "C": (0.2, 0.2),          
+            "D": (0.5, 0.5), 
+            "(OR C D)": (0.7, 0.7),   
         }
 
         random.seed(0)
