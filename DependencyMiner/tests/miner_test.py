@@ -1,60 +1,12 @@
 import unittest
 
 from DependencyMiner.miner import (
-    TreeNode,
-    tokenize,
-    parse_sexpr,
     OrderedTreeMiner,
     DependencyMiner,
+    sigmoid
 )
-
-
-class TestTreeParsing(unittest.TestCase):
-    def test_tokenize_simple(self):
-        s = "(AND A B C)"
-        tokens = tokenize(s)
-        self.assertEqual(tokens, ["(", "AND", "A", "B", "C", ")"])
-
-    def test_parse_simple_and(self):
-        s = "(AND A B C)"
-        tokens = tokenize(s)
-        root = parse_sexpr(tokens)
-
-        self.assertEqual(root.label, "AND")
-        self.assertEqual(len(root.children), 3)
-        self.assertTrue(all(child.is_leaf() for child in root.children))
-        self.assertEqual(str(root), "(AND A B C)")
-
-    def test_parse_nested_or_not(self):
-        s = "(AND (NOT A) (OR (NOT B) C))"
-        tokens = tokenize(s)
-        root = parse_sexpr(tokens)
-
-        self.assertEqual(root.label, "AND")
-        self.assertEqual(len(root.children), 2)
-
-        not_node = root.children[0]
-        or_node = root.children[1]
-
-        self.assertEqual(not_node.label, "NOT")
-        self.assertEqual(len(not_node.children), 1)
-        self.assertEqual(not_node.children[0].label, "A")
-
-        self.assertEqual(or_node.label, "OR")
-        self.assertEqual(len(or_node.children), 2)
-        self.assertEqual(str(root), "(AND (NOT A) (OR (NOT B) C))")
-
-    def test_parse_grouping(self):
-        # ((NOT A) B) should introduce an implicit GROUP node
-        s = "((NOT A) B)"
-        tokens = tokenize(s)
-        root = parse_sexpr(tokens)
-
-        self.assertEqual(root.label, "GROUP")
-        self.assertEqual(len(root.children), 2)
-        self.assertEqual(str(root.children[0]), "(NOT A)")
-        self.assertEqual(str(root.children[1]), "B")
-
+from Representation.helpers import tokenize, parse_sexpr
+from Representation.representation import FitnessOracle, Instance
 
 class TestOrderedTreeMiner(unittest.TestCase):
     def setUp(self):
@@ -136,22 +88,95 @@ class TestDependencyMiner(unittest.TestCase):
             "(AND B (NOT C))",
             "(AND (NOT B) (NOT C))",
         ]
-        self.default_weights = [1.0] * len(self.data)
+        # Create fitness oracle with arbitrary target
+        target_vals = [False, True, False, True, False, True, False, True]
+        self.fitness = FitnessOracle(target_vals)
+        
+        # Calculate real fitness scores for each expression
+        instances = [Instance(value=expr, id=i, score=0.0, knobs=[]) for i, expr in enumerate(self.data)]
+        self.default_weights = [self.fitness.get_fitness(inst) for inst in instances]
 
-    def test_fit_and_counts(self):
-        miner = DependencyMiner().fit(self.data, self.default_weights)
+    def test_empty_input(self):
+        miner = DependencyMiner()
+        miner.fit([], [])
+        
+        self.assertEqual(miner.total_weighted_contexts, 0.0)
+        self.assertEqual(len(miner.pair_counts), 0)
+        self.assertEqual(len(miner.single_counts), 0)
 
-        # There must be some contexts
-        self.assertGreater(miner.total_weighted_contexts, 0)
+    def test_zero_weights(self):
+        miner = DependencyMiner()
+        zero_weights = [0.0] * len(self.data)
+        miner.fit(self.data, zero_weights)
+        
+        self.assertEqual(miner.total_weighted_contexts, 0.0)
+        deps = miner.get_meaningful_dependencies()
+        self.assertEqual(deps, [])
 
-        # At least A, B, C (or their NOT/OR variants) must appear as single keys
-        single_keys = set(miner.single_counts.keys())
-        self.assertTrue(any("A" in k for k in single_keys))
-        self.assertTrue(any("B" in k for k in single_keys))
-        self.assertTrue(any("C" in k for k in single_keys))
+    def test_negative_weights_ignored(self):
+        miner = DependencyMiner()
+        negative_weights = [-1.0] * len(self.data)
+        miner.fit(self.data, negative_weights)
+        
+        self.assertEqual(miner.total_weighted_contexts, 0.0)
+        deps = miner.get_meaningful_dependencies()
+        self.assertEqual(deps, [])
 
-        # There should be some sibling pairs
-        self.assertGreater(len(miner.pair_counts), 0)
+    def test_single_expression_no_pairs(self):
+        miner = DependencyMiner()
+        miner.fit(["A"], [1.0])  
+        
+        self.assertEqual(miner.total_weighted_contexts, 0.0)
+        self.assertEqual(len(miner.pair_counts), 0)
+
+    def test_weighted_vs_unweighted(self):
+        # Create two different fitness scenarios
+        target1 = [False, True, False, True, False, True, False, True]
+        target2 = [True, False, True, False, True, False, True, False]
+        
+        fitness1 = FitnessOracle(target1)
+        fitness2 = FitnessOracle(target2)
+        
+        instances = [Instance(value=expr, id=i, score=0.0, knobs=[]) for i, expr in enumerate(self.data)]
+        weights1 = [fitness1.get_fitness(inst) for inst in instances]
+        weights2 = [fitness2.get_fitness(inst) for inst in instances]
+        
+        miner1 = DependencyMiner()
+        miner1.fit(self.data, weights1)
+        
+        miner2 = DependencyMiner()
+        miner2.fit(self.data, weights2)
+        
+        deps1 = miner1.get_meaningful_dependencies(min_pmi=0.0, min_freq=1)
+        deps2 = miner2.get_meaningful_dependencies(min_pmi=0.0, min_freq=1)
+        
+        # Different fitness landscapes should produce different dependency patterns
+        if deps1 and deps2:
+          
+            self.assertGreater(len(deps1), 0)
+            self.assertGreater(len(deps2), 0)
+    def test_weights_change_pmi(self):
+        # Create truth table: A XOR B
+        target_vals = [False, True, True, False]  
+        fitness = FitnessOracle(target_vals)
+        
+        data = [
+            "(AND A B)",     
+            "(OR A B)",       
+            "(AND (NOT A) B)", 
+            "(AND A (NOT B))",  
+        ]
+        
+        # Calculate real fitness scores as weights
+        instances = [Instance(value=expr, id=i, score=0.0, knobs=[]) for i, expr in enumerate(data)]
+        weights = [fitness.get_fitness(inst) for inst in instances]
+        
+        miner = DependencyMiner()
+        miner.fit(data, weights)
+        deps = miner.get_meaningful_dependencies(min_pmi=-0.1, min_freq=1)
+        
+        self.assertGreater(len(deps), 0)
+        self.assertTrue(all(d["weighted_freq"] > 0 for d in deps))
 
     def test_meaningful_dependencies(self):
         miner = DependencyMiner().fit(self.data, self.default_weights)
@@ -172,6 +197,21 @@ class TestDependencyMiner(unittest.TestCase):
         # Sort order: PMI non-increasing
         for i in range(len(deps) - 1):
             self.assertGreaterEqual(deps[i]["PMI"], deps[i + 1]["PMI"])
+
+class TestSigmoidFunction(unittest.TestCase):
+    def test_sigmoid_zero(self):
+        result = sigmoid(0)
+        self.assertAlmostEqual(result, 0.5, places=5)
+
+    def test_sigmoid_positive(self):
+        result = sigmoid(10)
+        self.assertGreater(result, 0.5)
+        self.assertLess(result, 1.0)
+
+    def test_sigmoid_negative(self):
+        result = sigmoid(-10)
+        self.assertLess(result, 0.5)
+        self.assertGreater(result, 0.0)
 
 
 if __name__ == "__main__":

@@ -67,40 +67,23 @@ def replace_one_symbol(expr: str, old: str, new: str) -> str:
     Replace exactly one occurrence of `old` as a separate token with `new`,
     preserving the order of knobs in the expression.
     """
-    tokens = re.findall(r'\(|\)|[^\s()]+', expr)
-    for i, t in enumerate(tokens):
-        if t == old:
-            tokens[i] = new
-            break
-    out = []
-    for t in tokens:
-        if t == '(' or t == ')':
-            out.append(t)
-        else:
-            if out and out[-1] != '(':
-                out.append(' ')
-            out.append(t)
-    return ''.join(out)
+    # Use word boundaries to match whole tokens only
+    pattern = r'\b' + re.escape(old) + r'\b'
+    return re.sub(pattern, new, expr, count=1)
 
 def exclude_one_symbol(expr:str , symbol_to_remove:str)->str:
     """
     Remove exactly one occurrence of `symbol_to_remove` as a separate token,
     preserving the order of knobs in the expression.
     """
-    tokens = re.findall(r'\(|\)|[^\s()]+', expr)
-    for i, t in enumerate(tokens):
-        if t == symbol_to_remove:
-            del tokens[i]
-            break
-    out = []
-    for t in tokens:
-        if t == '(' or t == ')':
-            out.append(t)
-        else:
-            if out and out[-1] != '(':
-                out.append(' ')
-            out.append(t)
-    return ''.join(out)
+    # Use word boundaries to match whole tokens only
+    pattern = r'\b' + re.escape(symbol_to_remove) + r'\b'
+    result = re.sub(pattern, '', expr, count=1)
+    # Clean up multiple spaces and spaces before closing parentheses
+    result = re.sub(r'\s+', ' ', result)  # Multiple spaces to single space
+    result = re.sub(r'\s+\)', ')', result)  # Space before closing paren
+    result = re.sub(r'\(\s+', '(', result)  # Space after opening paren
+    return result.strip()
 
 def isOP(token: str) -> bool:
     return token in ['AND', 'OR', 'NOT']
