@@ -8,43 +8,10 @@ from Representation.representation import (Quantale, Instance,
                                            knobs_from_truth_table)
 from Representation.csv_parser import load_truth_table
 from Representation.sampling import sample_from_TTable
-from Representation.helpers import tokenize
+from Representation.helpers import tokenize, get_top_level_features
 from typing import Any, Set
 import random
 
-
-def get_top_level_features(s_expr_str):
-    """
-    Parses "(AND A (OR B C) D)" into -> ["A", "(OR B C)", "D"]
-    """
-    content = s_expr_str.strip()
-    if content.startswith("(AND"):
-        content = content[4:-1].strip()
-    elif content.startswith("(OR"):
-        content = content[3:-1].strip()
-
-    
-    features = []
-    buffer = ""
-    balance = 0
-    
-    for char in content:
-        if char == '(':
-            balance += 1
-        elif char == ')':
-            balance -= 1
-            
-        if char == ' ' and balance == 0:
-            if buffer.strip():
-                features.append(buffer.strip())
-            buffer = ""
-        else:
-            buffer += char
-            
-    if buffer.strip():
-        features.append(buffer.strip())
-        
-    return features
 
 class VariationQuantale(Quantale):
     def __init__(self, m1, m2, stv_values):
