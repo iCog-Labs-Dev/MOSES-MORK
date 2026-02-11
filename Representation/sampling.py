@@ -108,37 +108,38 @@ def randomBernoulli(p: float, instance: Instance, features: List[Knob], knobs: L
             )
     
     for path in candidates:
-        if random.random() < p:
 
-            if not selected_knobs:
+        if not selected_knobs:
+            break
+        # symbol = selected_knobs.pop(0)
+        symbol = selected_knobs[0]
+
+        parent = mutant_root
+        valid_path = True
+        for idx in path[:-1]:
+            if idx < len(parent.children):
+                parent = parent.children[idx]
+            else:
+                valid_path = False
                 break
-            symbol = selected_knobs.pop(0)
+        
+        target_idx = path[-1]
+        if not valid_path:
+            continue  # Skip this mutation as the target no longer exists
+        
+        tokens = tokenize(symbol)
+        if len(tokens) > 1 and parent.label == "OR" and tokens[1] == "OR":
+            tokens[tokens.index("OR")] = "AND"
+            symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
 
-            # Navigate to the PARENT of the target node using the path
-            parent = mutant_root
-            valid_path = True
-            for idx in path[:-1]:
-                if idx < len(parent.children):
-                    parent = parent.children[idx]
-                else:
-                    valid_path = False
-                    break
-            
-            target_idx = path[-1]
-            if not valid_path or target_idx >= len(parent.children):
-                continue  # Skip this mutation as the target no longer exists
-            
-            tokens = tokenize(symbol)
-            if len(tokens) > 1 and parent.label == "OR" and tokens[1] == "OR":
-                tokens[tokens.index("OR")] = "AND"
-                symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
+        elif len(tokens) > 1 and parent.label == "AND" and tokens[1] == "AND":
+            tokens[tokens.index("AND")] = "OR"
+            symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
 
-            elif len(tokens) > 1 and parent.label == "AND" and tokens[1] == "AND":
-                tokens[tokens.index("AND")] = "OR"
-                symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
+        if random.random() > p:
+            if  target_idx >= len(parent.children): continue
 
-            if str(parent.children[target_idx]) == symbol:
-                continue
+            if str(parent.children[target_idx]) == symbol: continue
 
             is_sibling_duplicate = False
             for i, child in enumerate(parent.children):
@@ -146,27 +147,57 @@ def randomBernoulli(p: float, instance: Instance, features: List[Knob], knobs: L
                     is_sibling_duplicate = True
                     break
             
-            if is_sibling_duplicate:
-                continue
+            if is_sibling_duplicate: continue
 
             parent.children[target_idx] = TreeNode(symbol)
-            mutant_value = str(mutant_root)
-            if mutant_value == instanceExp:
+            selected_knobs.pop(0)
+        else:
+            append_target = parent
+            if append_target.label == "NOT":
+                if len(path) < 2:
+                    continue
+                
+                grandparent = mutant_root
+                gp_valid = True
+                for idx in path[:-2]:
+                    if idx < len(grandparent.children):
+                        grandparent = grandparent.children[idx]
+                    else:
+                        gp_valid = False
+                        break
+                
+                if not gp_valid: continue
+                append_target = grandparent
+
+            if append_target.label not in ["AND", "OR"]:
                 continue
 
-            new_inst.value = mutant_value
-            for t in tokens:
-                if isOP(t) or t in ['(', ')']:
-                    continue
-
-                knob = next((k for k in knobs if k.symbol == t), None)
-                if knob and knob.symbol not in [k.symbol for k in new_inst.knobs]:
-                    new_inst.knobs.append(knob)
-                
-                new_knob = next((k for k in new_knobs if k.symbol == t), None)
-                if new_knob and new_knob.symbol not in [k.symbol for k in new_inst.knobs]:
-                    new_inst.knobs.append(new_knob)
+            is_duplicate = False
+            for child in append_target.children:
+                if str(child) == symbol:
+                    is_duplicate = True; break
             
+            if not is_duplicate:
+                append_target.children.append(TreeNode(symbol))
+                selected_knobs.pop(0)
+        
+        mutant_value = str(mutant_root)
+        if mutant_value == instanceExp:
+            continue
+
+        new_inst.value = mutant_value
+        for t in tokens:
+            if isOP(t) or t in ['(', ')']:
+                continue
+
+            knob = next((k for k in knobs if k.symbol == t), None)
+            if knob and knob.symbol not in [k.symbol for k in new_inst.knobs]:
+                new_inst.knobs.append(knob)
+            
+            new_knob = next((k for k in new_knobs if k.symbol == t), None)
+            if new_knob and new_knob.symbol not in [k.symbol for k in new_inst.knobs]:
+                new_inst.knobs.append(new_knob)
+
     present_tokens = set(tokenize(new_inst.value))
     new_inst.knobs = [k for k in new_inst.knobs if k.symbol in present_tokens]
 
