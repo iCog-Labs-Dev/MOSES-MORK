@@ -80,16 +80,16 @@ def randomBernoulli(p: float, instance: Instance, features: List[Knob], knobs: L
     
     mutant_root = deepcopy(root)
     candidates = []
-    queue = deque([mutant_root])
+    queue = deque([(mutant_root, None)])
 
     while queue:
-        curr_node = queue.popleft()
+        curr_node,parent = queue.popleft()
 
         for i, child in enumerate(curr_node.children):
-            candidates.append((curr_node, i))
+            candidates.append((curr_node, i,parent))
 
             if not child.is_leaf():
-                queue.append(child)
+                queue.append((child,curr_node))
 
 
     new_inst = Instance(
@@ -109,10 +109,8 @@ def randomBernoulli(p: float, instance: Instance, features: List[Knob], knobs: L
    
     added_symbols = set(k.symbol for k in new_inst.knobs)
 
-    for parent, target_idx in candidates:
-        if random.random() < p:
-            continue
-
+    for parent, target_idx, grandparent in candidates:
+    
         if not selected_knobs:
             break
 
@@ -132,24 +130,52 @@ def randomBernoulli(p: float, instance: Instance, features: List[Knob], knobs: L
             tokens[tokens.index("AND")] = "OR"
             symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
         
+        if random.random() > p:
+            if target_idx >= len(parent.children):
+                continue
+            
+      
+            if str(parent.children[target_idx]) == symbol:
+                continue
 
       
-        if str(parent.children[target_idx]) == symbol:
-            continue
+            is_sibling_duplicate = False
 
-      
-        is_sibling_duplicate = False
-        for i, child in enumerate(parent.children):
-            if i != target_idx and str(child) == symbol:
-                is_sibling_duplicate = True
-                break
+            for i, child in enumerate(parent.children):
+                if i != target_idx and str(child) == symbol:
+                    is_sibling_duplicate = True
+                    break
 
-        if is_sibling_duplicate:
-            continue
+            if is_sibling_duplicate:
+                continue
 
-        
-        parent.children[target_idx] = TreeNode(symbol)
-        selected_knobs.popleft()
+            parent.children[target_idx] = TreeNode(symbol)
+            selected_knobs.popleft()
+
+        else:
+
+            append_target=parent
+
+            if append_target.label =="NOT":
+                if grandparent is None:
+                    continue
+                append_target = grandparent
+
+            if append_target.label  not in ("AND","OR"):
+                continue
+
+            duplicate = False
+
+            for child in append_target.children:
+                if str(child) == symbol:
+                    duplicate = True
+                    break
+
+            if duplicate:
+                continue
+
+            append_target.children.append(TreeNode(symbol))
+            selected_knobs.popleft()
 
         mutant_value = str(mutant_root)
         if mutant_value == instanceExp:
