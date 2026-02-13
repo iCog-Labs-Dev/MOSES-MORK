@@ -1,4 +1,5 @@
 import unittest
+import math
 
 from DependencyMiner.miner import (
     OrderedTreeMiner,
@@ -190,6 +191,7 @@ class TestDependencyMiner(unittest.TestCase):
         # Each dependency entry must contain required keys
         for d in deps:
             self.assertIn("pair", d)
+
             self.assertIn("strength", d)
             self.assertIn("confidence", d)
             # self.assertIn("Lift", d)
@@ -198,6 +200,57 @@ class TestDependencyMiner(unittest.TestCase):
         # Sort order: PMI non-increasing
         for i in range(len(deps) - 1):
             self.assertGreaterEqual(deps[i]["confidence"], deps[i + 1]["confidence"])
+
+    def test_strength_range(self):
+        miner = DependencyMiner().fit(self.data, self.default_weights)
+        deps = miner.get_meaningful_dependencies(min_pmi=0.0, min_freq=2)
+
+        for d in deps:
+            self.assertGreaterEqual(d["strength"], 0.0)
+            self.assertLessEqual(d["strength"], 1.0)
+
+    def test_confidence_range(self):
+        miner = DependencyMiner().fit(self.data, self.default_weights)
+        deps = miner.get_meaningful_dependencies(min_pmi=0.0, min_freq=2)
+
+        for d in deps:
+            self.assertGreaterEqual(d["confidence"], 0.0)
+            self.assertLessEqual(d["confidence"], 1.0)
+
+    def test_confidence_is_joint_probability(self):
+        # Simple controlled test case
+        data = [
+            "(AND A B)",  
+            "(AND A B)",  
+            "(AND A C)",  
+        ]
+        weights = [1.0, 1.0, 1.0]
+        
+        miner = DependencyMiner().fit(data, weights)
+        deps = miner.get_meaningful_dependencies(min_pmi=0.0, min_freq=1)
+        
+        # Find A--B pair
+        ab_pair = next((d for d in deps if "A" in d["pair"] and "B" in d["pair"]), None)
+        
+        if ab_pair:
+            # Manual calculation:
+            # Total contexts = 3 (3 AND nodes with multiple children)
+            # A-B appears together in 2 contexts
+            # P(A,B) = 2/3 = 0.6667
+            expected_confidence = 2.0 / 3.0
+            self.assertAlmostEqual(ab_pair["confidence"], expected_confidence, places=3,
+                                 msg=f"Confidence should equal P(X,Y) = pair_weight/total_contexts")
+        
+        # Find A--C pair
+        ac_pair = next((d for d in deps if "A" in d["pair"] and "C" in d["pair"]), None)
+        
+        if ac_pair:
+            # A-C appears together in 1 context
+            # P(A,C) = 1/3 = 0.3333
+            expected_confidence = 1.0 / 3.0
+            self.assertAlmostEqual(ac_pair["confidence"], expected_confidence, places=3,
+                                 msg=f"Confidence should equal P(X,Y) = pair_weight/total_contexts")
+
 
 class TestSigmoidFunction(unittest.TestCase):
     def test_sigmoid_zero(self):
