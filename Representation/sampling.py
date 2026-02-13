@@ -17,6 +17,7 @@ import csv
 from typing import List, Dict
 from copy import deepcopy
 import random
+from collections import deque
 
 def sample_logical_perms(current_op: str, variables: List[Knob]) -> List[str]:
     """
@@ -59,132 +60,105 @@ def randomUniform(knobs, hyperparams: Hyperparams):
 
     return selected_knobs   
 
-def randomBernoulli(hyperparams: Hyperparams, instance: Instance, features: List[Knob], knobs: List[Knob]) -> Instance:
-    """
-    Perform Bernoulli sampling to select a knob for replacement.
-    
-    Args:
-        p (float): Probability of selecting a knob.
-        hyperparams: neihborhood_size identification.
-        instance: The instance object (exemplar).
-        knobs (List): List of knob objects to sample from.
-        
-    Returns:
-        A set of newly generated instances.
-    """
+
+
+def randomBernoulli(hyperparams: Hyperparams, instance: Instance,
+                     features: List[Knob], knobs: List[Knob]) -> Instance:
+
     instanceExp = deepcopy(instance.value)
     sexp = tokenize(instanceExp)
     op = sexp[1] if sexp else None
     root = parse_sexpr(sexp)
+
     perms, new_knobs = sample_logical_perms(op, features)
     selected_knobs = randomUniform(perms, hyperparams)
 
-
-
     if not selected_knobs:
-        return
+        return None
 
-    candidates = [[]]
-    queue = [(root, [])]
     mutant_root = deepcopy(root)
 
+    
+    candidates = []
+    queue = deque([(mutant_root, None)])
 
     while queue:
-        curr_node, curr_path = queue.pop(0)
-        
+        curr_node, parent = queue.popleft()
+
         for i, child in enumerate(curr_node.children):
-            child_path = curr_path + [i]
-            candidates.append(child_path)
-            
+            entry = (curr_node, parent, i)
+            candidates.append(entry)
             if not child.is_leaf():
-                queue.append((child, child_path))
+                queue.append((child, curr_node))
 
     new_inst = Instance(
-                value=str(mutant_root),
-                id=instance.id,
-                score=0.0,
-                knobs=deepcopy(instance.knobs)
-            )
-    
-    for path in candidates:
+        value=str(mutant_root),
+        id=instance.id,
+        score=0.0,
+        knobs=deepcopy(instance.knobs)
+    )
 
-        if not selected_knobs:
+    knob_idx = 0
+    knob_count = len(selected_knobs)
+
+    knob_map = {k.symbol: k for k in knobs}
+    new_knob_map = {k.symbol: k for k in new_knobs}
+
+
+    selected_knobs = deque(selected_knobs)
+
+   
+    added_symbols = set(k.symbol for k in new_inst.knobs)
+    for parent, grandparent, idx in candidates:
+
+        if knob_idx >= knob_count:
             break
-        # symbol = selected_knobs.pop(0)
-        symbol = selected_knobs[0]
 
-        # Navigate to the PARENT of the target node using the path
-        parent = mutant_root
-        valid_path = True
-        for idx in path[:-1]:
-            if idx < len(parent.children):
-                parent = parent.children[idx]
-            else:
-                valid_path = False
-                break
-        
-        target_idx = path[-1] if path else -1
-        if not valid_path:
-            continue  # Skip this mutation as the target no longer exists
-        
+        symbol = selected_knobs[knob_idx]
         tokens = tokenize(symbol)
+
         if len(tokens) > 1 and parent.label == "OR" and tokens[1] == "OR":
             tokens[tokens.index("OR")] = "AND"
             symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
 
-        if len(tokens) > 1 and parent.label == "AND" and tokens[1] == "AND":
+        elif len(tokens) > 1 and parent.label == "AND" and tokens[1] == "AND":
             tokens[tokens.index("AND")] = "OR"
             symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
 
+        if random.random() > hyperparams.bernoulli_prob:
 
-        rand = random.random()
-        # print("Random: ", rand, " Bernoulli Prob: ", hyperparams.bernoulli_prob)
-        if rand > hyperparams.bernoulli_prob:
             append_target = parent
-            if append_target.label == "NOT":
-                if len(path) < 2:
-                    continue
-                
-                grandparent = mutant_root
-                gp_valid = True
-                for idx in path[:-2]:
-                    if idx < len(grandparent.children):
-                        grandparent = grandparent.children[idx]
-                    else:
-                        gp_valid = False
-                        break
-                
-                if not gp_valid: continue
+
+            if append_target and append_target.label == "NOT":
                 append_target = grandparent
 
-            if append_target.label not in ["AND", "OR"]:
-                continue
+            if append_target and append_target.label in ["AND", "OR"]:
 
-            is_duplicate = False
-            for child in append_target.children:
-                if str(child) == symbol:
-                    is_duplicate = True; break
-            
-            if not is_duplicate:
-                append_target.children.append(TreeNode(symbol))
-                selected_knobs.pop(0)
-                
+                child_strs = {str(c) for c in append_target.children}
+
+                if symbol not in child_strs:
+                    append_target.children.append(TreeNode(symbol))
+                    knob_idx += 1
+
         mutant_value = str(mutant_root)
         if mutant_value == instanceExp:
             continue
 
         new_inst.value = mutant_value
+
+       
+
         for t in tokens:
             if isOP(t) or t in ['(', ')']:
                 continue
-
-            knob = next((k for k in knobs if k.symbol == t), None)
-            if knob and knob.symbol not in [k.symbol for k in new_inst.knobs]:
+            knob = knob_map.get(t)
+            if knob and knob.symbol not in added_symbols:
                 new_inst.knobs.append(knob)
-            
-            new_knob = next((k for k in new_knobs if k.symbol == t), None)
-            if new_knob and new_knob.symbol not in [k.symbol for k in new_inst.knobs]:
+                added_symbols.add(knob.symbol)
+            new_knob = new_knob_map.get(t)
+            if new_knob and new_knob.symbol not in added_symbols:
                 new_inst.knobs.append(new_knob)
+                added_symbols.add(new_knob.symbol)
 
     present_tokens = set(tokenize(new_inst.value))
     new_inst.knobs = [k for k in new_inst.knobs if k.symbol in present_tokens]
