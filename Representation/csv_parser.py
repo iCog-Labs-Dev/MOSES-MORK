@@ -12,7 +12,6 @@ def load_truth_table(filepath, output_col='O'):
     """
     data_rows = []
     output_values = []    
-    
     try:
         with open(filepath, mode='r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
@@ -20,16 +19,15 @@ def load_truth_table(filepath, output_col='O'):
             for row in reader:
                 clean_row = {}
                 for key, val in row.items():
-                    v= val.strip().upper()
-                     
-                    bool_val = v in ('1', 'T', 'TRUE', 'YES')
-                    
+                    v = val.strip().upper()
+                    bool_val = v in ('1', 'TRUE', 'T', 'YES')
+
                     if key == output_col:
                         output_values.append(bool_val)
                     else:
                         clean_row[key] = bool_val
-            
-            data_rows.append(clean_row)
+
+                data_rows.append(clean_row)
                 
     except FileNotFoundError:
         print(f"Error: File {filepath} not found.")
@@ -39,4 +37,3 @@ def load_truth_table(filepath, output_col='O'):
         return [], []
 
     return data_rows, output_values
-
