@@ -240,7 +240,7 @@ def extract_features(csv_path: str, output_col: str = 'O'):
     features = interaction_aware_mrmr(
         csv_path=csv_path,
         target_col=output_col,
-        k=5,
+        k=None,  # we can specify K if we want 
         max_interaction_order=order,
         output_type='subsets'
     )

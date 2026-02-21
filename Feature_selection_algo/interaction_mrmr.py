@@ -1,7 +1,10 @@
 import math
-import csv
 from typing import List, Dict, Set, Tuple, FrozenSet, Union
 from itertools import combinations
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from Representation.csv_parser import load_truth_table
 
 def calculate_joint_entropy(features: List[List[bool]]) -> float:
     """
@@ -78,7 +81,7 @@ def calculate_interaction_gain(
     relevance = calculate_conditional_mutual_information(
         candidate_features, selected_features, target
     )
-    print(f"Calculated relevance (conditional MI): {relevance}")
+    # print(f"Calculated relevance (conditional MI): {relevance}")
     
     # Redundancy: how much the candidate overlaps with selected features
     if selected_features and candidate_features:
@@ -87,14 +90,14 @@ def calculate_interaction_gain(
         for sel_feat in selected_features:
             # Calculate MI between candidate features and this selected feature
             mi = calculate_joint_mutual_information(
-                candidate_features + [sel_feat], 
+                candidate_features, 
                 sel_feat
-            ) - calculate_joint_entropy([sel_feat])
+            ) 
             redundancy += abs(mi)
         redundancy /= len(selected_features)
     else:
         redundancy = 0.0
-    print(f"Relevance: {relevance}, Redundancy: {redundancy}, Interaction Gain: {relevance - redundancy}")
+    # print(f"Relevance: {relevance}, Redundancy: {redundancy}, Interaction Gain: {relevance - redundancy}")
     
     return relevance - redundancy
 
@@ -107,33 +110,30 @@ def feature_order(csv_path: str, target_col: str) -> int:
     Returns:
         practical_order: int
     """
-    try:
-        with open(csv_path, mode='r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            if reader.fieldnames:
-                features = [col for col in reader.fieldnames if col != target_col]
-                num_features = len(features)
-    except FileNotFoundError:
-        print(f"File {csv_path} not found.")
+    data_rows, _target_values = load_truth_table(csv_path, target_col)
+    if not data_rows:
+        # Keep a conservative default when the file is missing/empty/unreadable.
         num_features = 3
+    else:
+        # ``load_truth_table`` returns rows without the output column, so keys are features.
+        num_features = len(data_rows[0].keys())
 
-    practical_order = min(num_features, 4)
-    return practical_order
-
+    return min(num_features, 4)
 def interaction_aware_mrmr(
     csv_path: str, 
     target_col: str, 
-    k: int,
+    k: int = None,
     max_interaction_order: int = 2,
     output_type: str = 'list'
 ) -> Union[List[Tuple[FrozenSet[str], float]], Set[str], Set[Union[str, Tuple[str, ...]]]]:
     """
-    Extended mRMR that considers higher-order feature interactions.
-    
+
+    Extended mRMR that considers higher-order feature interactions 
+
     Args:
         csv_path: Path to the CSV file.
         target_col: Name of the output/target column.
-        k: Number of feature subsets to select.
+        k: Optional  Number of feature subsets to select if not specified or None - automatically stops when cumulative gain no longer increases.
         max_interaction_order: Maximum size of feature combinations to consider (1=single, 2=pairs, etc.)
         output_type: Format of the return value. 
             'list': Returns List[Tuple[FrozenSet[str], float]] (default).
@@ -143,122 +143,126 @@ def interaction_aware_mrmr(
     Returns:
         Depends on output_type.
     """
+
     # 1. Load Data
-    columns: Dict[str, List[bool]] = {}
-    target_values: List[bool] = []
-    
-    try:
-        with open(csv_path, mode='r', encoding='utf-8-sig') as f:
-            reader = csv.DictReader(f)
-            if not reader.fieldnames:
-                return []
-                
-            for field in reader.fieldnames:
-                if field != target_col:
-                    columns[field] = []
-            
-            for row in reader:
-                try:
-                    if target_col in row:
-                        val = row[target_col].strip().upper()
-                        target_values.append(val in ('1', 'TRUE', 'T', 'YES'))
-                    else:
-                        raise ValueError(f"Target column '{target_col}' not found")
-                    
-                    for field in columns.keys():
-                        val = row[field].strip().upper()
-                        columns[field].append(val in ('1', 'TRUE', 'T', 'YES'))
-                        
-                except Exception:
-                    continue
-                    
-    except FileNotFoundError:
-        print(f"Error: File {csv_path} not found.")
+    data_rows, target_values = load_truth_table(csv_path, target_col)
+
+    if not target_values or not data_rows:
         return []
 
-    if not target_values:
-        print("Error: No target values found.")
-        return []
-    
-    valid_features = {name: vals for name, vals in columns.items() 
-                     if len(vals) == len(target_values)}
-    
+    # Convert rows to column format
+    columns: Dict[str, List[bool]] = {}
+    for key in data_rows[0].keys():
+        columns[key] = []
+
+    for row in data_rows:
+        for key, value in row.items():
+            columns[key].append(value)
+
+    valid_features = {
+        name: vals for name, vals in columns.items()
+        if len(vals) == len(target_values)
+    }
+
     if not valid_features:
         return []
-    
-    # 2. Generate candidate feature subsets up to max_interaction_order
+
+    # 2. Generate candidate subsets
     all_candidates: List[Tuple[FrozenSet[str], List[List[bool]]]] = []
-    
+
     for order in range(1, min(max_interaction_order + 1, len(valid_features) + 1)):
         for feature_combo in combinations(valid_features.keys(), order):
             feature_set = frozenset(feature_combo)
             feature_data = [valid_features[name] for name in feature_combo]
             all_candidates.append((feature_set, feature_data))
-    
-    # 3. Calculate initial relevance for all candidates
+
+    # 3. Compute initial relevance
     candidate_relevance: Dict[FrozenSet[str], float] = {}
     for feature_set, feature_data in all_candidates:
         mi = calculate_joint_mutual_information(feature_data, target_values)
         candidate_relevance[feature_set] = mi
-    
-    # 4. Iterative selection with interaction awareness
+
     selected: List[Tuple[FrozenSet[str], float]] = []
     selected_feature_data: List[List[bool]] = []
     remaining_candidates = set(candidate_relevance.keys())
-    
-    # First selection: highest relevance
+
+    cumulative_gain = 0.0
+
+    # 4. First selection (highest relevance)
     if remaining_candidates:
         first = max(remaining_candidates, key=lambda fs: candidate_relevance[fs])
-        score = candidate_relevance[first]
-        selected.append((first, score))
-        selected_feature_data.extend([valid_features[name] for name in first])
-        remaining_candidates.remove(first)
-        
-        # Remove subsets of the selected feature set
-        remaining_candidates = {
-            cand for cand in remaining_candidates 
-            if not cand.issubset(first)
-        }
-    
-    # Iterative selection
-    while len(selected) < k and remaining_candidates:
+        first_score = candidate_relevance[first]
+
+        if first_score > 0:
+            selected.append((first, first_score))
+            cumulative_gain += first_score
+            selected_feature_data.extend([valid_features[name] for name in first])
+            remaining_candidates.remove(first)
+
+            # Remove subsets of selected
+            remaining_candidates = {
+                cand for cand in remaining_candidates
+                if not cand.issubset(first)
+            }
+
+    # 5. Iterative selection with cumulative stopping
+    while remaining_candidates:
+
         best_candidate = None
         best_score = float('-inf')
-        
+
         for candidate_set in remaining_candidates:
             candidate_data = [valid_features[name] for name in candidate_set]
-            
-            # Calculate interaction gain
+
             score = calculate_interaction_gain(
                 candidate_data,
                 selected_feature_data,
                 target_values
             )
-            
+
             if score > best_score:
                 best_score = score
                 best_candidate = candidate_set
-        
-        if best_candidate and best_score > float('-inf'):
-            selected.append((best_candidate, best_score))
-            selected_feature_data.extend([valid_features[name] for name in best_candidate])
-            remaining_candidates.remove(best_candidate)
-            
-            # Remove subsets that are now redundant
-            remaining_candidates = {
-                cand for cand in remaining_candidates
-                if not cand.issubset(best_candidate) and not any(
-                    cand.issubset(sel[0]) for sel in selected
-                )
-            }
-        else:
+
+        # Stop conditions
+        if (
+            best_candidate is None
+            or cumulative_gain + best_score <= cumulative_gain
+        ):
+            # print(f" best_score: {best_score}, cumulative_gain: {cumulative_gain}")
+            # print(f"Stopping at cumulative gain: {cumulative_gain:.4f}")
             break
-            
+
+        # Optional k-limit safeguard
+        if k is not None and len(selected) >= k:
+            # print(f"Reached k={k} selected subsets, stopping selection.")
+            break
+
+        # Select best candidate
+        selected.append((best_candidate, best_score))
+        cumulative_gain += best_score
+
+        selected_feature_data.extend(
+            [valid_features[name] for name in best_candidate]
+        )
+
+        remaining_candidates.remove(best_candidate)
+
+        # Remove redundant subsets
+        remaining_candidates = {
+            cand for cand in remaining_candidates
+            if not cand.issubset(best_candidate)
+            and not any(cand.issubset(sel[0]) for sel in selected)
+        }
+        
+
+    # 6. Output formatting
     if output_type == 'set':
         final_set = set()
         for fset, _ in selected:
             final_set.update(fset)
         return final_set
+
     elif output_type == 'subsets':
         final_subsets = set()
         for fset, _ in selected:
@@ -288,7 +292,7 @@ def interaction_aware_mrmr(
 #         results = interaction_aware_mrmr(
 #             csv_file, 
 #             target_column, 
-#             k=5, 
+#             k=0, 
 #             max_interaction_order=max_order,
 #             output_type='lists'
 #         )
