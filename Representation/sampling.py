@@ -19,6 +19,28 @@ from copy import deepcopy
 import random
 from collections import deque
 
+def prune_duplicates(node: TreeNode):
+    """
+    Recursively removes duplicate children from AND/OR nodes.
+    """
+    if not node.children:
+        return
+
+    for child in node.children:
+        prune_duplicates(child)
+
+    # If this node is commutative (AND / OR), remove duplicate children
+    if node.label in ["AND", "OR"]:
+        unique_children = []
+        seen = set()
+        for child in node.children:
+            s = str(child)
+            if s not in seen:
+                seen.add(s)
+                unique_children.append(child)
+        node.children = unique_children
+
+
 def sample_logical_perms(current_op: str, variables: List[Knob]) -> List[str]:
     """
     Generates a 'menu' of new Boolean logic pieces (proposals).
@@ -124,59 +146,96 @@ def randomBernoulli(hyperparams: Hyperparams, instance: Instance,
 
    
     added_symbols = set(k.symbol for k in new_inst.knobs)
-    for parent, grandparent, idx in candidates:
+    if len(candidates) == 1 and mutant_root.label in ["AND", "OR"]:
+        # Special case: Dump multiple selected knobs into the root
+        for i, symbol in enumerate(selected_knobs):
+            # ... token logic ...
+            tokens = tokenize(symbol)
+            # ... operator flipping logic ...
+            if len(tokens) > 1 and mutant_root.label == "OR" and tokens[1] == "OR":
+                tokens[tokens.index("OR")] = "AND"
+                symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
 
-        if knob_idx >= knob_count:
-            break
-
-        symbol = selected_knobs[knob_idx]
-        tokens = tokenize(symbol)
-
-        if len(tokens) > 1 and parent.label == "OR" and tokens[1] == "OR":
-            tokens[tokens.index("OR")] = "AND"
-            symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
-
-        elif len(tokens) > 1 and parent.label == "AND" and tokens[1] == "AND":
-            tokens[tokens.index("AND")] = "OR"
-            symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
-
-        if random.random() > hyperparams.bernoulli_prob:
-
-            append_target = parent
-
-            if append_target and append_target.label == "NOT":
-                append_target = grandparent
-
-            if append_target and append_target.label in ["AND", "OR"]:
-
-                child_strs = {str(c) for c in append_target.children}
-
-                if symbol not in child_strs:
-                    append_target.children.append(TreeNode(symbol))
-                    knob_idx += 1
-
-        mutant_value = str(mutant_root)
-        if mutant_value == instanceExp:
-            continue
-
-        new_inst.value = mutant_value
-
-       
-
+            elif len(tokens) > 1 and mutant_root.label == "AND" and tokens[1] == "AND":
+                tokens[tokens.index("AND")] = "OR"
+                symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
+            
+            # Simple append (ignoring probability check effectively, or checking it per knob)
+            if random.random() > hyperparams.bernoulli_prob: # usage check
+                 mutant_root.children.append(TreeNode(symbol))
+        
+        prune_duplicates(mutant_root)
+        new_inst.value = str(mutant_root)
         for t in tokens:
-            if isOP(t) or t in ['(', ')']:
-                continue
-            knob = knob_map.get(t)
-            if knob and knob.symbol not in added_symbols:
-                new_inst.knobs.append(knob)
-                added_symbols.add(knob.symbol)
-            new_knob = new_knob_map.get(t)
-            if new_knob and new_knob.symbol not in added_symbols:
-                new_inst.knobs.append(new_knob)
-                added_symbols.add(new_knob.symbol)
+                if isOP(t) or t in ['(', ')']:
+                    continue
+                knob = knob_map.get(t)
+                if knob and knob.symbol not in added_symbols:
+                    new_inst.knobs.append(knob)
+                    added_symbols.add(knob.symbol)
+                new_knob = new_knob_map.get(t)
+                if new_knob and new_knob.symbol not in added_symbols:
+                    new_inst.knobs.append(new_knob)
+                    added_symbols.add(new_knob.symbol)
 
-    present_tokens = set(tokenize(new_inst.value))
-    new_inst.knobs = [k for k in new_inst.knobs if k.symbol in present_tokens]
+        present_tokens = set(tokenize(new_inst.value))
+        new_inst.knobs = [k for k in new_inst.knobs if k.symbol in present_tokens]
+
+    else:
+        for parent, grandparent, idx in candidates:
+
+            if knob_idx >= knob_count:
+                break
+
+            symbol = selected_knobs[knob_idx]
+            tokens = tokenize(symbol)
+
+            if len(tokens) > 1 and parent.label == "OR" and tokens[1] == "OR":
+                tokens[tokens.index("OR")] = "AND"
+                symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
+
+            elif len(tokens) > 1 and parent.label == "AND" and tokens[1] == "AND":
+                tokens[tokens.index("AND")] = "OR"
+                symbol = " ".join(tokens).replace("( ", "(").replace(" )", ")")
+
+            rand = random.random()
+            # print("Random value for Bernoulli sampling: ", rand)
+            if rand > hyperparams.bernoulli_prob:
+
+                append_target = parent
+
+                if append_target and append_target.label == "NOT":
+                    append_target = grandparent
+
+                if append_target and append_target.label in ["AND", "OR"]:
+
+                    child_strs = {str(c) for c in append_target.children}
+
+                    if symbol not in child_strs:
+                        append_target.children.append(TreeNode(symbol))
+                        knob_idx += 1
+
+            prune_duplicates(mutant_root)
+            mutant_value = str(mutant_root)
+            if mutant_value == instanceExp:
+                continue
+
+            new_inst.value = mutant_value
+
+            for t in tokens:
+                if isOP(t) or t in ['(', ')']:
+                    continue
+                knob = knob_map.get(t)
+                if knob and knob.symbol not in added_symbols:
+                    new_inst.knobs.append(knob)
+                    added_symbols.add(knob.symbol)
+                new_knob = new_knob_map.get(t)
+                if new_knob and new_knob.symbol not in added_symbols:
+                    new_inst.knobs.append(new_knob)
+                    added_symbols.add(new_knob.symbol)
+
+        present_tokens = set(tokenize(new_inst.value))
+        new_inst.knobs = [k for k in new_inst.knobs if k.symbol in present_tokens]
 
     return new_inst
 
@@ -296,21 +355,6 @@ def sample_from_TTable(csv_path: str, hyperparams: Hyperparams, exemplar: Instan
         selected_features = [k for k in knobs if k.symbol in (feat if isinstance(feat, (list, tuple)) else [feat])]
         instances = sample_new_instances(hyperparams, exemplar, selected_features, exemplar.knobs)
         unique_instances = reduce_and_score(instances, fitness, metta)
-        # for inst in instances.values():
-        #     reduced = reduce(metta, inst.value)
-        #     # inst.value = reduced
-        #     if isinstance(reduced, list) and len(reduced) > 0:
-        #         inst.value = str(reduced[0])
-        #     else:
-        #         inst.value = str(reduced)
-
-
-        #     present_tokens = set(tokenize(inst.value))
-        #     inst.knobs = [k for k in inst.knobs if k.symbol in present_tokens]
-
-        #     inst.score = fitness.get_fitness(inst)
-        #     if inst.value not in unique_instances:
-        #         unique_instances[inst.value] = inst
             
         demes.append(Deme(instances=list(unique_instances), id=(len(demes)), q_hyper=hyperparams))
         

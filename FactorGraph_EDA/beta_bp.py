@@ -11,6 +11,10 @@ class BetaState:
         self.alpha = alpha  # Evidence for True
         self.beta = beta    # Evidence for False
 
+        # Base Priors
+        self.prior_a = alpha
+        self.prior_b = beta
+
     @property
     def strength(self):
         # Mean probability: alpha / (alpha + beta)
@@ -74,17 +78,12 @@ class BetaFactorGraph:
                 break
         
         if existing_rule:
-            # UPDATE LOGIC:
-            # Option A: Simple Average (Learning over time)
-            # existing_rule['s'] = (existing_rule['s'] + strength) / 2
-            # existing_rule['c'] = (existing_rule['c'] + confidence) / 2
-            
-            # Option B: High confidence overwrites low confidence (Greedy)
+            # High confidence overwrites low confidence (Greedy)
             # if confidence > existing_rule['c']:
             #     existing_rule['s'] = strength
             #     existing_rule['c'] = confidence
             
-            # Option C: Weighted Update (New data counts for 30%)
+            # Weighted Update (New data counts for 30%)
             alpha = 0.7
             existing_rule['s'] = (1 - alpha) * existing_rule['s'] + alpha * rule_strength
             existing_rule['c'] = (1 - alpha) * existing_rule['c'] + alpha * rule_confidence
@@ -107,13 +106,12 @@ class BetaFactorGraph:
         node = self.get_or_create_node(name)
         
         # Convert STV (Prob, Conf) -> Beta Counts (Alpha, Beta)
-        evidence = stv_confidence * base_counts
+        evidence = max(0.1, stv_confidence * base_counts)
+        a = (stv_strength * evidence) + 1.0
+        b = ((1.0 - stv_strength) * evidence) + 1.0
         
-        # If confidence is 0, we still add epsilon to avoid div/0
-        evidence = max(0.1, evidence)
-        
-        node.alpha = (stv_strength * evidence) + 1.0
-        node.beta = ((1.0 - stv_strength) * evidence) + 1.0
+        node.alpha = node.prior_a = a
+        node.beta = node.prior_b = b
     
     def visualize(self, title="Beta Factor Graph"):
         """
@@ -131,7 +129,6 @@ class BetaFactorGraph:
         var_sizes = []
         labels = {}
         
-        # 1. Add Variable Nodes (Circles)
         for name, node in self.nodes.items():
             G.add_node(name)
             var_nodes.append(name)
@@ -144,8 +141,6 @@ class BetaFactorGraph:
             # Label with current belief
             labels[name] = f"{name}\nS:{s:.2f}\nC:{c:.2f}"
 
-        # 2. Add Factor Nodes (Squares) & Edges
-        # Instead of Direct Edges, we do Var -> Factor -> Var
         for i, rule in enumerate(self.factors):
             # Create a unique ID for the factor node based on connection
             f_id = f"F_{rule['src']}_{rule['dst']}_{i}"
@@ -202,52 +197,83 @@ class BetaFactorGraph:
 
 
 
-    def run_evidence_propagation(self, steps=5):
-        print(f"--- Running Beta-Propagation on {len(self.nodes)} Nodes ---")
+    def run_evidence_propagation(self, steps=10, decay=0.9):
+        print(f"--- Running Beta-Propagation (Modus Ponens + Abduction + Revision) ---")
         
         for i in range(steps):
             max_delta = 0
             
-            # Simple Forward Logic Pass
+            # REVISION PART 1: Create an empty "Inbox" for every node
+            # We will accumulate evidence here for this step.
+            inboxes = {name: {'a': 0.0, 'b': 0.0} for name in self.nodes}
+
+            # --- CALCULATE MESSAGES ---
             for rule in self.factors:
-                src_node = self.nodes[rule['src']]
-                dst_node = self.nodes[rule['dst']]
+                src_name = rule['src']
+                dst_name = rule['dst']
+                src_node = self.nodes[src_name]
+                dst_node = self.nodes[dst_name]
                 
-                # 1. Determine Input Strength
+                S = rule['s']
+                C = rule['c']
+                rule_capacity = C * 20.0
+                
+                # ==========================================
+                # FORWARD PASS (Modus Ponens)
+                # ==========================================
                 p_src = src_node.strength
-                
-                # 2. Apply Rule Logic (Weighted Modus Ponens)
-                # "If Src is True, Dst is True with prob S"
-                # "If Src is False, Dst is... uncertain (0.5)?"
-                # Simplified Inference: 
-                predicted_strength = (p_src * rule['s']) + ((1.0 - p_src) * 0.5)
-                
-                # 3. Determine Evidence Flow (The "Valve")
-                # We can't be more confident than the Source OR the Rule.
                 src_evidence = src_node.alpha + src_node.beta
-                rule_capacity = rule['c'] * 20.0 # Scaling factor for rule "stiffness"
                 
-                # The bottleneck
-                evidence_to_pass = min(src_evidence, rule_capacity)
+                # Logic: If Src is True -> Dst is True (prob S). 
+                # If Src is False -> Dst is Unknown (prob 0.5)
+                fwd_strength = (p_src * S) + ((1.0 - p_src) * 0.5)
                 
-                # 4. Convert to Message Counts
-                msg_alpha = predicted_strength * evidence_to_pass
-                msg_beta = (1.0 - predicted_strength) * evidence_to_pass
+                # Attenuate evidence (decay) over distance to guarantee convergence
+                fwd_evidence = min(src_evidence * decay, rule_capacity)
                 
-                # 5. Fuse (Update Destination)
-                # Soft update: Average current state with new message
-                # (Prevents feedback loops in loopy graphs)
-                new_alpha = (dst_node.alpha + msg_alpha) / 2.0
-                new_beta = (dst_node.beta + msg_beta) / 2.0
+                # Put message in Destination's Inbox
+                inboxes[dst_name]['a'] += fwd_strength * fwd_evidence
+                inboxes[dst_name]['b'] += (1.0 - fwd_strength) * fwd_evidence
+
+                # ==========================================
+                # BACKWARD PASS (Abduction & Modus Tollens)
+                # ==========================================
+                p_dst = dst_node.strength
+                dst_evidence = dst_node.alpha + dst_node.beta
                 
-                delta = abs(new_alpha - dst_node.alpha)
+                # Logic: 
+                # Abduction: If Dst is True -> Src is likely True (prob S)
+                # Modus Tollens: If Dst is False -> Src is definitely False (prob 1-S)
+                bwd_strength = (p_dst * S) + ((1.0 - p_dst) * (1.0 - S))
+                
+                # Backward flow is usually weaker (more uncertain) than forward flow
+                # We apply a harsher penalty to abducted evidence.
+                bwd_evidence = min(dst_evidence * (decay * 0.5), rule_capacity)
+                
+                # Put message in Source's Inbox
+                inboxes[src_name]['a'] += bwd_strength * bwd_evidence
+                inboxes[src_name]['b'] += (1.0 - bwd_strength) * bwd_evidence
+
+            # ==========================================
+            # REVISION PART 2: Apply Inbox (Fusion)
+            # ==========================================
+            for name, node in self.nodes.items():
+                # The true Beta-Fusion operator: 
+                # New State = Prior Base + Sum of all incoming evidence
+                new_a = node.prior_a + inboxes[name]['a']
+                new_b = node.prior_b + inboxes[name]['b']
+                
+                # Track convergence
+                delta = abs(new_a - node.alpha) + abs(new_b - node.beta)
                 max_delta = max(max_delta, delta)
                 
-                dst_node.alpha = new_alpha
-                dst_node.beta = new_beta
+                # Update node
+                node.alpha = new_a
+                node.beta = new_b
             
             print(f"Step {i+1}: Max Evidence Update = {max_delta:.4f}")
-            if max_delta < 0.01:
+            if max_delta < 0.05:
+                print("Convergence reached.")
                 break
 
 # --- Main Execution ---
@@ -261,19 +287,14 @@ class BetaFactorGraph:
 # # 1. Init
 # bg = BetaFactorGraph()
 
-# # 2. Load Rules
 # for row in data:
 #     bg.add_dependency_rule(row['pair'], row['strength'], row['confidence'])
 
-# # 3. CRITICAL STEP: Set Priors (Anchors)
-# # You MUST tell the graph that at least one node is "True" or "False".
-# # Otherwise, 0 * 0.8 = 0.
+
 # bg.set_prior("A", stv_strength=0.9, stv_confidence=0.8) # "We are pretty sure A is True"
 
-# # 4. Run
 # bg.run_evidence_propagation(steps=10)
 
-# # 5. Results
 # print("\n--- Final STV Results ---")
 # print(f"{'Variable':<10} | {'Strength':<8} | {'Confidence':<10} | {'Counts (a/b)'}")
 # for name, node in bg.nodes.items():

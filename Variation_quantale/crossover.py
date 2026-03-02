@@ -161,10 +161,6 @@ def crossTopOne(instances: List[Instance], stv_dict: Dict[str, Tuple[float, floa
         child = vq.execute_crossover()
         child.score = fitness.get_fitness(child)
         
-        # Inherit parent score logic? Usually children need re-evaluation.
-        # But we can average parents for a temporary placeholder if needed.
-        # child.score = (top_parent.score + spouse.score) / 2 # Optional placeholder
-        
         children.append(child)
 
     return children

@@ -30,6 +30,36 @@ def _finalize_metapop(metapop: List[Instance], fg_type=None) -> List[Instance]:
         print(f"Instance: {inst.value} | Score: {inst.score:.5f}")
     return sorted_meta
 
+
+def clean_structure(expression: str) -> str:
+    """
+    Parses an instance value, removes duplicate children from AND/OR nodes,
+    and returns the cleaned string.
+    """
+    try:
+        def _prune(node):
+            if not node.children:
+                return
+            for child in node.children:
+                _prune(child)
+            
+            if node.label in ["AND", "OR"]:
+                unique = []
+                seen = set()
+                for child in node.children:
+                    s = str(child)
+                    if s not in seen:
+                        seen.add(s)
+                        unique.append(child)
+                node.children = unique
+
+        root = parse_sexpr(expression)
+        _prune(root)
+        return str(root)
+    except Exception as e:
+        return expression
+
+
 def run_variation(deme, fitness, hyperparams, target, min_xover_neighbors=5):
     bg = BetaFactorGraph()
     
@@ -75,6 +105,7 @@ def run_variation(deme, fitness, hyperparams, target, min_xover_neighbors=5):
         if len(deme.instances) >= min_xover_neighbors:
             raw_children = crossTopOne(selected_exemplars, stv_dict, target)
             for inst in raw_children:
+                inst.value = clean_structure(inst.value)
                 if inst.value not in existing_values:
                     new_candidates.append(inst)
                     existing_values.add(inst.value)
@@ -85,16 +116,20 @@ def run_variation(deme, fitness, hyperparams, target, min_xover_neighbors=5):
         mutation = Mutation(mut_parent, stv_dict, hyperparams)
 
         child1 = mutation.execute_additive()
-        if isinstance(child1, Instance) and child1.value not in existing_values:
-            child1.score = fitness.get_fitness(child1)
-            new_candidates.append(child1)
-            existing_values.add(child1.value)
+        if isinstance(child1, Instance):
+            child1.value = clean_structure(child1.value)
+            if child1.value not in existing_values:
+                child1.score = fitness.get_fitness(child1)
+                new_candidates.append(child1)
+                existing_values.add(child1.value)
 
         child2 = mutation.execute_multiplicative()
-        if isinstance(child2, Instance) and child2.value not in existing_values:
-            child2.score = fitness.get_fitness(child2)
-            new_candidates.append(child2)
-            existing_values.add(child2.value)
+        if isinstance(child2, Instance):
+            child2.value = clean_structure(child2.value)
+            if child2.value not in existing_values:
+                child2.score = fitness.get_fitness(child2)
+                new_candidates.append(child2)
+                existing_values.add(child2.value)
 
         deme.instances.extend(new_candidates)
     
@@ -106,7 +141,7 @@ def run_bp_moses(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyperp
               distance: int = 1, max_dist: int = 5, 
               last_chance: bool = False, best_possible_score: float = 1.0) -> List[Instance]:
     
-    if max_iter <= 0:
+    if max_iter <= iteration:
         print("\nMax iterations limit reached...")
         return _finalize_metapop(metapop)
     
@@ -182,12 +217,10 @@ def run_bp_moses_sa(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyp
                  temperature: float = 1.0, cooling_rate: float = 0.9, 
                  best_possible_score: float = 1.0) -> List[Instance]:
     
-    # 1. Early Termination Checks
     if iteration > max_iter:
         print("\nMax iterations limit reached...")
         return _finalize_metapop(metapop)
     
-    # We stop if temperature approaches absolute zero to prevent math/division errors
     if temperature < 1e-5:
         print("\nSystem has cooled down completely (T ≈ 0). Terminating...")
         return _finalize_metapop(metapop)
@@ -196,7 +229,6 @@ def run_bp_moses_sa(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyp
         print(f"\nTerminating because best possible score ({best_possible_score}) was found!")
         return _finalize_metapop(metapop)
 
-    # 2. Neighborhood Sampling
     demes = sample_from_TTable(csv_path, hyperparams, exemplar, exemplar.knobs, target, output_col='O')
     print(f"\n[Iter {iteration} | Temp {temperature:.4f}] Running Variation for {len(demes)} demes centered on: {exemplar.value}...")
     
@@ -215,12 +247,9 @@ def run_bp_moses_sa(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyp
             meta_dict[best_in_deme.value] = best_in_deme
             added_count += 1
 
-    # Keep the metapopulation sorted by absolute bests globally
     metapop = sorted(meta_dict.values(), key=lambda x: x.score, reverse=True)
     print(f"Merged {added_count} new unique instances. Metapop Size: {len(metapop)}")
 
-    # We evaluate the best candidate generated in THIS specific neighborhood round
-    # (Note: we don't just take metapop[0] because that might be an old, distant peak)
     round_bests = [max(deme.instances, key=lambda x: x.score) for deme in new_demes if deme.instances]
     if not round_bests:
         print("No valid instances generated this round. Cooling and staying in place...")
@@ -228,19 +257,16 @@ def run_bp_moses_sa(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyp
     else:
         new_best = max(round_bests, key=lambda x: x.score)
         
-        # 3. Simulated Annealing Acceptance Criteria
         delta_score = new_best.score - exemplar.score
         
         if delta_score > 1e-6:
             print(f"*** Strict Improvement found! Score: {new_best.score:.4f} (+{delta_score:.4f}) ***")
             next_exemplar = new_best
+        
         else:
-            # It's a worse (or equal) solution. Calculate acceptance probability.
-            # delta_score is negative here, so delta/temp will be negative.
             acceptance_prob = math.exp(delta_score / temperature)
             random_draw = random.random() + 1e-3
             
-            # --- NEW: Explicitly handle flat plateaus ---
             if abs(delta_score) <= 1e-6:
                 print(f"--- SA ACCEPTED sideways move: {new_best.score:.4f} (Score didn't change) ---")
                 next_exemplar = new_best
@@ -253,10 +279,8 @@ def run_bp_moses_sa(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyp
                 print(f" -> Staying centered on {exemplar.value} (Score: {exemplar.score:.4f})")
                 next_exemplar = exemplar
 
-    # 4. Cooling Schedule
     next_temperature = temperature * cooling_rate
 
-    # Recurse with updated state and cooled temperature
     return run_bp_moses_sa(
         next_exemplar, fitness, hyperparams, target, csv_path, metapop, 
         iteration=iteration + 1, max_iter=max_iter, 

@@ -196,35 +196,35 @@ class Mutation(Quantale):
 
 
 
-if __name__ == "__main__":
-    hyperparam = Hyperparams(mutation_rate=0.3, crossover_rate=0.7, neighborhood_size=10, num_generations=10)
-    knob_vals, target_vals = load_truth_table('example_data/test_bin.csv', output_col='O')
-    knobs = knobs_from_truth_table(knob_vals)
-    stv = {
-    "A": (0.95, 0.95), # Strong
-    "B": (0.80, 0.80), # Good
-    "C": (0.20, 0.20),  # Weak
-    "D": (0.35, 0.50),  # Weak
-    "E": (0.46, 0.50),  # Weak
-    "F": (0.46, 0.50),  # Weak
-    "(OR D (AND E F))": (0.7, 0.5) # Moderate
-    }
-    # parent = "(AND A B C)"
-    parent = Instance(value=f"(AND A B C (OR D (AND E F)))", id=0, score=0.0, knobs=knobs)
+# if __name__ == "__main__":
+#     hyperparam = Hyperparams(mutation_rate=0.3, crossover_rate=0.7, neighborhood_size=10, num_generations=10)
+#     knob_vals, target_vals = load_truth_table('example_data/test_bin.csv', output_col='O')
+#     knobs = knobs_from_truth_table(knob_vals)
+#     stv = {
+#     "A": (0.95, 0.95), # Strong
+#     "B": (0.80, 0.80), # Good
+#     "C": (0.20, 0.20),  # Weak
+#     "D": (0.35, 0.50),  # Weak
+#     "E": (0.46, 0.50),  # Weak
+#     "F": (0.46, 0.50),  # Weak
+#     "(OR D (AND E F))": (0.7, 0.5) # Moderate
+#     }
+#     # parent = "(AND A B C)"
+#     parent = Instance(value=f"(AND A B C (OR D (AND E F)))", id=0, score=0.0, knobs=knobs)
 
-    metta = MeTTa()
-    mutator = Mutation(parent, stv, hyperparam)
-    print(f"Parent: {parent.value}")
+#     metta = MeTTa()
+#     mutator = Mutation(parent, stv, hyperparam)
+#     print(f"Parent: {parent.value}")
 
-    # 1. Generate Multiplicative Child (The Pruned One)
-    # C is likely to be removed.
-    child_mult = mutator.execute_multiplicative()
-    print(f"Multiplicative Child: {child_mult.value} | Knobs: {[k.symbol for k in child_mult.knobs]}")
+#     # 1. Generate Multiplicative Child (The Pruned One)
+#     # C is likely to be removed.
+#     child_mult = mutator.execute_multiplicative()
+#     print(f"Multiplicative Child: {child_mult.value} | Knobs: {[k.symbol for k in child_mult.knobs]}")
 
-    # 2. Generate Additive Child (The Noisy One)
-    # Might add (NOT A) or (NOT C)
-    child_add = mutator.execute_additive()
-    print(f"Additive Child:       {child_add.value} | Knobs: {[k.symbol for k in child_add.knobs]}")
+#     # 2. Generate Additive Child (The Noisy One)
+#     # Might add (NOT A) or (NOT C)
+#     child_add = mutator.execute_additive()
+#     print(f"Additive Child:       {child_add.value} | Knobs: {[k.symbol for k in child_add.knobs]}")
     # reduced = reduce(metta, child_add.value)
     # print(f"Reduced Additive:     {reduced}")
 
