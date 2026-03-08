@@ -231,20 +231,29 @@ def sample_random_instances(instance: Instance, hyperparams: Hyperparams) -> Ins
     return child
 
   
-def knobs_from_truth_table(ITable: List[dict]) -> List[Knob]:
+def knobs_from_truth_table(ITable: List[dict], exclude: List[str] = None) -> List[Knob]:
     """
     Given a truth table (list of dict rows), extract:
       - unique symbols (keys)
       - unique values per symbol
     and instantiate Knob objects.
+    
+    Args:
+        ITable: List of dictionaries representing truth table rows
+        exclude: List of column names to exclude (e.g., ['O'] for output column)
     """
     if not ITable:
         return []
+    
+    if exclude is None:
+        exclude = []
 
     values_by_key: dict[str, list[bool]] = {}
 
     for row in ITable:
         for key, val in row.items():
+            if key in exclude:
+                continue
             if key not in values_by_key:
                 values_by_key[key] = []
             
