@@ -72,8 +72,8 @@ def main():
     random.seed(42)
     
     metapop = []
-    csv_path = "example_data/test_parity_5.csv"
-    hyperparams = Hyperparams(mutation_rate=0.3, crossover_rate=0.5, num_generations=50, neighborhood_size=20, bernoulli_prob=0.5, uniform_prob=0.2)
+    csv_path = "example_data/test_bin.csv"
+    hyperparams = Hyperparams(mutation_rate=0.3, crossover_rate=0.5, num_generations=30, neighborhood_size=20, bernoulli_prob=0.5, uniform_prob=0.2)
     input, target = load_truth_table(csv_path, output_col='O')
     knobs = knobs_from_truth_table(input)
     knobs = [k for k in knobs if k.symbol != 'O']
