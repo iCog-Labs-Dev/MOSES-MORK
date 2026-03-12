@@ -12,6 +12,7 @@ from Moses.run_abp_moses import run_abp_moses
 import random
 import math
 from typing import List
+import datetime
 
 def run_moses(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyperparams, 
               knobs: List[Knob], target: List[bool], csv_path: str, 
@@ -77,64 +78,100 @@ def grid_search_tuning():
     
     
     random.seed(42)
-    csv_path = "example_data/test_parity_3.csv"
-    input_data, target = load_truth_table(csv_path, output_col='O')
-    knobs = knobs_from_truth_table(input_data)
-    knobs = [k for k in knobs if k.symbol != 'O']
-    fitness = FitnessOracle(target)
+    csv_paths = ["example_data/test_parity_3.csv", "example_data/test_parity_4.csv"]
 
-    results = []
+    for csv_path in csv_paths:
 
-    for b in b_probs:
-        for u in u_probs:
-            print(f"\nTesting: Bernoulli={b}, Uniform={u}")
-            
-            current_hp = Hyperparams(
-                mutation_rate=0.3, 
-                crossover_rate=0.5, 
-                num_generations=15,
-                neighborhood_size=20,
-                bernoulli_prob=b, 
-                uniform_prob=u
-            )
-            
-            exemplar = Instance(value=f"(AND)", id=0, score=0.0, knobs=knobs)
-            exemplar.score = fitness.get_fitness(exemplar)
-            
-            metapop = [exemplar]
-            
-            final_pop = run_moses(
-                exemplar=exemplar, 
-                fitness=fitness, 
-                hyperparams=current_hp, 
-                knobs=knobs,
-                target=target, 
-                csv_path=csv_path, 
-                metapop=metapop, 
-                max_iter=5, 
-                fg_type="beta"
-            )
-            
-            # Find best score in this run
-            if final_pop:
-                best_inst = max(final_pop, key=lambda x: x.score)
-                results.append({
-                    'b': b, 
-                    'u': u, 
-                    'score': best_inst.score, 
-                    'instance': best_inst.value
-                })
-                print(f"-> Result: Score {best_inst.score:.4f}")
-            else:
-                print("-> Result: No population return")
+        input_data, target = load_truth_table(csv_path, output_col='O')
+        knobs = knobs_from_truth_table(input_data)
+        knobs = [k for k in knobs if k.symbol != 'O']
+        fitness = FitnessOracle(target)
 
-    # 4. Report Best
-    print("\n--- Tuning Results ---")
-    results.sort(key=lambda x: x['score'], reverse=True)
-    for r in results:
-        print(f"Score: {r['score']:.4f} | B={r['b']}, U={r['u']} | Inst: {r['instance']}")
+        results = []
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        log_filename = f"grid_search_results_{csv_path[13:-4]}_{timestamp}.txt"
 
-    print(f"\n*** Best Configuration: B={results[0]['b']}, U={results[0]['u']} ***")
+        with open(log_filename, "w") as log_file:
+            header = f"--- Starting Grid Search on {csv_path} at {timestamp} ---\n"
+            print(header.strip())
+            log_file.write(header + "\n")
+            log_file.write(f"{'Bernoulli':<10} | {'Uniform':<10} | {'Score':<10} | {'Top Instance'}\n")
+            log_file.write("-" * 80 + "\n")
+
+
+            for b in b_probs:
+                for u in u_probs:
+                    print(f"\nTesting: Bernoulli={b}, Uniform={u}")
+                    
+                    current_hp = Hyperparams(
+                        mutation_rate=0.3, 
+                        crossover_rate=0.5, 
+                        num_generations=15,
+                        neighborhood_size=20,
+                        bernoulli_prob=b, 
+                        uniform_prob=u
+                    )
+                    
+                    exemplar = Instance(value=f"(AND)", id=0, score=0.0, knobs=knobs)
+                    exemplar.score = fitness.get_fitness(exemplar)
+                    
+                    metapop = [exemplar]
+                    
+                    final_pop = run_moses(
+                        exemplar=exemplar, 
+                        fitness=fitness, 
+                        hyperparams=current_hp, 
+                        knobs=knobs,
+                        target=target, 
+                        csv_path=csv_path, 
+                        metapop=metapop, 
+                        max_iter=5, 
+                        fg_type="beta"
+                    )
+                    
+                    # Find best score in this run
+                    if final_pop:
+                        best_inst = max(final_pop, key=lambda x: x.score)
+                        results.append({
+                            'b': b, 
+                            'u': u, 
+                            'score': best_inst.score, 
+                            'instance': best_inst.value
+                        })
+                        print(f"-> Result: Score {best_inst.score:.4f}")
+                        log_line = f"{b:<10.1f} | {u:<10.1f} | {best_inst.score:<10.4f} | {best_inst.value}\n"
+                        log_file.write(log_line)
+                        log_file.flush() # Ensure it's written in case of crash
+                    else:
+                        print("-> Result: No population return")
+                        log_file.write(f"{b:<10.1f} | {u:<10.1f} | {'N/A':<10} | No Population\n")
+                        
+
+        # 4. Report Best
+        # print("\n--- Tuning Results ---")
+        # results.sort(key=lambda x: x['score'], reverse=True)
+        # for r in results:
+        #     print(f"Score: {r['score']:.4f} | B={r['b']}, U={r['u']} | Inst: {r['instance']}")
+
+        # print(f"\n*** Best Configuration: B={results[0]['b']}, U={results[0]['u']} ***")
+        print("\n--- Tuning Results ---")
+        log_file.write("\n" + "="*80 + "\n")
+        log_file.write("FINAL SUMMARY (Sorted by Score descending)\n")
+        log_file.write("="*80 + "\n")
+
+        results.sort(key=lambda x: x['score'], reverse=True)
+        
+        for r in results:
+            summary_line = f"Score: {r['score']:.4f} | B={r['b']}, U={r['u']} | Inst: {r['instance']}"
+            print(summary_line)
+            log_file.write(summary_line + "\n")
+
+        if results:
+            best = results[0]
+            best_msg = f"\n*** Best Configuration: B={best['b']}, U={best['u']} with Score {best['score']:.4f} ***"
+            print(best_msg)
+            log_file.write(best_msg + "\n")
+
 
 if __name__ == "__main__":
     # main() 
