@@ -89,7 +89,7 @@ def grid_search_tuning():
 
         results = []
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"grid_search_results_{csv_path[13:-4]}_{timestamp}.txt"
+        log_filename = f"grid_search_results_{csv_path[13:-4]}.txt"
 
         with open(log_filename, "w") as log_file:
             header = f"--- Starting Grid Search on {csv_path} at {timestamp} ---\n"
@@ -146,46 +146,29 @@ def grid_search_tuning():
                         print("-> Result: No population return")
                         log_file.write(f"{b:<10.1f} | {u:<10.1f} | {'N/A':<10} | No Population\n")
                         
+            print("\n--- Tuning Results ---")
+            log_file.write("\n" + "="*80 + "\n")
+            log_file.write("FINAL SUMMARY (Sorted by Score descending)\n")
+            log_file.write("="*80 + "\n")
 
-        # 4. Report Best
-        # print("\n--- Tuning Results ---")
-        # results.sort(key=lambda x: x['score'], reverse=True)
-        # for r in results:
-        #     print(f"Score: {r['score']:.4f} | B={r['b']}, U={r['u']} | Inst: {r['instance']}")
+            results.sort(key=lambda x: x['score'], reverse=True)
+            
+            for r in results:
+                summary_line = f"Score: {r['score']:.4f} | B={r['b']}, U={r['u']} | Inst: {r['instance']}"
+                print(summary_line)
+                log_file.write(summary_line + "\n")
 
-        # print(f"\n*** Best Configuration: B={results[0]['b']}, U={results[0]['u']} ***")
-        print("\n--- Tuning Results ---")
-        log_file.write("\n" + "="*80 + "\n")
-        log_file.write("FINAL SUMMARY (Sorted by Score descending)\n")
-        log_file.write("="*80 + "\n")
-
-        results.sort(key=lambda x: x['score'], reverse=True)
-        
-        for r in results:
-            summary_line = f"Score: {r['score']:.4f} | B={r['b']}, U={r['u']} | Inst: {r['instance']}"
-            print(summary_line)
-            log_file.write(summary_line + "\n")
-
-        if results:
-            best = results[0]
-            best_msg = f"\n*** Best Configuration: B={best['b']}, U={best['u']} with Score {best['score']:.4f} ***"
-            print(best_msg)
-            log_file.write(best_msg + "\n")
-
-
-if __name__ == "__main__":
-    # main() 
-    grid_search_tuning() # Call this instead        
-
-
-
+            if results:
+                best = results[0]
+                best_msg = f"\n*** Best Configuration: B={best['b']}, U={best['u']} with Score {best['score']:.4f} ***"
+                print(best_msg)
+                log_file.write(best_msg + "\n")
 
 def main(): 
     random.seed(42)
-    # grid_search_tuning()
     metapop = []
     csv_path = "example_data/test_parity_3.csv"
-    hyperparams = Hyperparams(mutation_rate=0.3, crossover_rate=0.5, num_generations=30, neighborhood_size=20, bernoulli_prob=0.6, uniform_prob=0.8)
+    hyperparams = Hyperparams(mutation_rate=0.3, crossover_rate=0.5, num_generations=30, neighborhood_size=20, bernoulli_prob=0.6, uniform_prob=0.6)
     input, target = load_truth_table(csv_path, output_col='O')
     knobs = knobs_from_truth_table(input)
     knobs = [k for k in knobs if k.symbol != 'O']
@@ -211,3 +194,4 @@ def main():
     
 if __name__ == "__main__":
     main()
+    # grid_search_tuning()
