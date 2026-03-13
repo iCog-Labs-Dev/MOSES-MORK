@@ -332,7 +332,7 @@ class FitnessOracle:
         """
         # Check cache (using the program string as key)
         if instance.value in self.memo:
-            print('Used From Cache CCCCCCC')
+            # print('Used From Cache CCCCCCC')
             instance.score = self.memo[instance.value]
             return instance.score
         

@@ -6,7 +6,7 @@ Factors are pairwise edges carrying PLN truth values (strength, confidence).
 """
 
 from typing import Dict, List, Optional, Tuple
-from Representation.pln import STV
+from FactorGraph_EDA.pln import STV
 
 
 class SubtreeVariable:

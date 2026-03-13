@@ -10,7 +10,7 @@ import random
 from copy import deepcopy
 from typing import List, Optional, Tuple
 
-from Representation.pln import STV, c2w, w2c, revision, deduction, negation
+from FactorGraph_EDA.pln import STV, c2w, w2c, revision, deduction, negation
 from FactorGraph_EDA.factor_graph import SubtreeVariable, PairwiseFactor, FactorGraph
 from Representation.representation import Instance, Knob, Deme, FitnessOracle
 from Representation.selection import select_top_k

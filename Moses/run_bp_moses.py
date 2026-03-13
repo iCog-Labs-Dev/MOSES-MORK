@@ -15,6 +15,7 @@ from hyperon import MeTTa
 import random
 import math
 from typing import List
+# from time import sleep
 
 
 def _finalize_metapop(metapop: List[Instance], fg_type=None) -> List[Instance]:
@@ -121,9 +122,9 @@ def run_bp_moses(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyperp
         print("\nMax iterations limit reached...")
         return _finalize_metapop(metapop)
     
-    # if distance > max_dist:
-    #     print("\nTerminating because maximum search distance reached...")
-    #     return _finalize_metapop(metapop)
+    if distance > max_dist:
+        print("\nTerminating because maximum search distance reached...")
+        return _finalize_metapop(metapop)
 
     if exemplar.score >= best_possible_score:
         print(f"\nTerminating because best possible score ({best_possible_score}) was found!")
@@ -131,6 +132,15 @@ def run_bp_moses(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyperp
 
     demes = sample_from_TTable(csv_path, hyperparams, exemplar, exemplar.knobs, target, output_col='O')
     print(f"\n[Iter {iteration} | Dist {distance}] Running Variation for {len(demes)} demes centered on: {exemplar.value}...")
+    
+    if len(demes) == 0:
+        print("No demes generated from sampling. Expanding search distance...")
+        return run_bp_moses(
+            exemplar, fitness, hyperparams, target, csv_path, metapop, 
+            iteration=iteration + 1, max_iter=max_iter, 
+            distance=distance + 1, max_dist=max_dist, 
+            last_chance=False, best_possible_score=best_possible_score
+        )
     
     new_demes = [run_variation(deme, fitness, hyperparams, target) for deme in demes]
 
