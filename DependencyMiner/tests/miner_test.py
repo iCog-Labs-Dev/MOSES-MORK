@@ -130,6 +130,16 @@ class TestDependencyMiner(unittest.TestCase):
         self.assertEqual(miner.total_weighted_contexts, 0.0)
         self.assertEqual(len(miner.pair_counts), 0)
 
+    def test_or_literal_is_allowed_but_o_is_ignored(self):
+        miner = DependencyMiner()
+        miner.fit(["(AND A OR)", "(AND A B)"], [1.0, 1.0])
+
+        self.assertIn("OR", miner.single_counts)
+        self.assertNotIn("O", miner.single_counts)
+        deps = miner.get_meaningful_dependencies(min_pmi=-1.0, min_freq=1)
+        self.assertTrue(any(dep["pair"] == "A -- OR" for dep in deps))
+        self.assertTrue(all("O" not in dep["pair"].split(" -- ") for dep in deps))
+
     def test_weighted_vs_unweighted(self):
         # Create two different fitness scenarios
         target1 = [False, True, False, True, False, True, False, True]

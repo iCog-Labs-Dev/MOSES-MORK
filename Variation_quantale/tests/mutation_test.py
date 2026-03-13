@@ -95,7 +95,7 @@ class MutationTestCase(unittest.TestCase):
         child_symbols = {k.symbol for k in child.knobs}
         self.assertTrue(child_symbols.issubset(parent_symbols))
 
-    def test_execute_multiplicative_empty_kept_uses_base_op_only(self):
+    def test_execute_multiplicative_empty_kept_returns_parent_instance(self):
         hyper_low = Hyperparams(
             mutation_rate=0.0001,
             crossover_rate=0.7,
@@ -106,9 +106,15 @@ class MutationTestCase(unittest.TestCase):
         mutator_low = Mutation(self.parent, stv_zero, hyper_low)
 
         # product() is stochastic, but with such low rate and zero scores,
-        # it's extremely likely all will be pruned; we assert the fallback format
+        # all features should be pruned and the implementation falls back
+        # to a valid Instance based on the parent.
         child = mutator_low.execute_multiplicative()
-        self.assertEqual(child, f"({mutator_low.base_op})")
+        self.assertIsInstance(child, Instance)
+        self.assertEqual(child.value, self.parent.value)
+        self.assertEqual(
+            {k.symbol for k in child.knobs},
+            {k.symbol for k in self.parent.knobs},
+        )
 
     # ---------- additive mutation ----------
 

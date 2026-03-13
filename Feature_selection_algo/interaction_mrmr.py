@@ -117,8 +117,8 @@ def feature_order(csv_path: str, target_col: str) -> int:
     else:
         # ``load_truth_table`` returns rows without the output column, so keys are features.
         num_features = len(data_rows[0].keys())
-
     return min(num_features, 4)
+
 
 def interaction_aware_mrmr(
     csv_path: str, 

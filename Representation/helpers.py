@@ -20,6 +20,9 @@ class TreeNode:
         child_strs = " ".join([str(c) for c in self.children])
         return f"({self.label} {child_strs})"
 
+
+LOGIC_OPERATORS = {"AND", "OR", "NOT"}
+
 def tokenize(s_expr):
     """Converts s-expression string into a list of significant tokens."""
     return s_expr.replace('(', ' ( ').replace(')', ' ) ').split()
@@ -86,7 +89,56 @@ def exclude_one_symbol(expr:str , symbol_to_remove:str)->str:
     return result.strip()
 
 def isOP(token: str) -> bool:
-    return token in ['AND', 'OR', 'NOT']
+    return token in LOGIC_OPERATORS
+
+
+def _is_valid_logic_node(node: TreeNode, is_root: bool, allow_empty_and_root: bool) -> bool:
+    if node.label == "NOT":
+        return len(node.children) == 1 and all(
+            _is_valid_logic_node(child, False, allow_empty_and_root)
+            for child in node.children
+        )
+
+    if node.label == "OR":
+        return len(node.children) >= 2 and all(
+            _is_valid_logic_node(child, False, allow_empty_and_root)
+            for child in node.children
+        )
+
+    if node.label == "AND":
+        if len(node.children) == 0:
+            return allow_empty_and_root and is_root
+        return all(
+            _is_valid_logic_node(child, False, allow_empty_and_root)
+            for child in node.children
+        )
+
+    if isOP(node.label):
+        return False
+
+    return all(
+        _is_valid_logic_node(child, False, allow_empty_and_root)
+        for child in node.children
+    )
+
+
+def is_valid_logic_expr(expr: str, allow_empty_and_root: bool = True) -> bool:
+    tokens = tokenize(expr)
+    if not tokens:
+        return False
+
+    for index, token in enumerate(tokens):
+        if isOP(token):
+            prev_token = tokens[index - 1] if index > 0 else None
+            if prev_token != '(':
+                return False
+
+    try:
+        root = parse_sexpr(tokens[:])
+    except Exception:
+        return False
+
+    return _is_valid_logic_node(root, is_root=True, allow_empty_and_root=allow_empty_and_root)
 
 
 def prune_duplicate_children(expr_or_node: Union[str, TreeNode]) -> Union[str, TreeNode]:

@@ -16,7 +16,7 @@ import datetime
 
 def run_moses(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyperparams, 
               knobs: List[Knob], target: List[bool], csv_path: str, 
-              metapop: List[Instance], max_iter: int = 100, fg_type: str = "alpha") -> List[Instance]:
+              metapop: List[Instance], max_iter: int | None = None, fg_type: str | None = None) -> List[Instance]:
     """
     Unified entry point for running MOSES optimization.
     
@@ -28,12 +28,14 @@ def run_moses(exemplar: Instance, fitness: FitnessOracle, hyperparams: Hyperpara
         target: Target values
         csv_path: Path to CSV data
         metapop: Initial metapopulation
-        max_iter: Maximum iterations
-        fg_type: 'beta' for beta-variational MOSES, 'alpha' for standard MOSES
+
     
     Returns: Final metapopulation of instances after evolution.
     """
     
+    max_iter = hyperparams.max_iter if max_iter is None else max_iter
+    fg_type = hyperparams.fg_type if fg_type is None else fg_type
+
     print(f"Starting MOSES Run with Strategy: {fg_type.upper()}")
     
     if fg_type.lower() == "beta":
@@ -167,11 +169,26 @@ def grid_search_tuning():
 def main(): 
     random.seed(42)
     metapop = []
-    csv_path = "example_data/test_parity_3.csv"
-    hyperparams = Hyperparams(mutation_rate=0.3, crossover_rate=0.5, num_generations=30, neighborhood_size=20, bernoulli_prob=0.6, uniform_prob=0.6)
+
+    csv_path = "example_data/test_bin.csv"
+    hyperparams = Hyperparams(
+        mutation_rate=0.3,
+        crossover_rate=0.5,
+        num_generations=30,
+        max_iter=300,
+        neighborhood_size=20,
+        fg_type="beta",
+        bernoulli_prob=0.6,
+        uniform_prob=0.8,
+        initial_population_size=2,
+        exemplar_selection_size=7,
+        min_crossover_neighbors=5,
+        evidence_propagation_steps=20,
+    )
     input, target = load_truth_table(csv_path, output_col='O')
-    knobs = knobs_from_truth_table(input)
-    knobs = [k for k in knobs if k.symbol != 'O']
+    knobs = knobs_from_truth_table(input, exclude=['O'])
+    
+
     exemplar = Instance(value=f"(AND)", id=0, score=0.0, knobs=knobs)
     fitness = FitnessOracle(target)
     exemplar.score = fitness.get_fitness(exemplar)
@@ -186,9 +203,9 @@ def main():
         knobs=knobs,
         target=target, 
         csv_path=csv_path, 
-        metapop=metapop, 
-        max_iter=10,
-        fg_type="beta"  # Change to "alpha" for alpha version of factor graph, "beta" for BP-based MOSES
+
+        metapop=metapop,
+
     )
     
     

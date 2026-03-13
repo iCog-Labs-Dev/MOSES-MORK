@@ -8,7 +8,7 @@ from Representation.representation import (Quantale, Instance,
                                            knobs_from_truth_table)
 from Representation.csv_parser import load_truth_table
 from Representation.sampling import sample_from_TTable
-from Representation.helpers import tokenize, get_top_level_features
+from Representation.helpers import tokenize, get_top_level_features, is_valid_logic_expr
 from typing import Any, Set, List, Dict, Tuple
 import random
 
@@ -104,8 +104,15 @@ class VariationQuantale(Quantale):
         root_op = "AND" 
         if self.m1.value.strip().startswith("(OR"):
             root_op = "OR"
-            
-        child_value = f"({root_op} {' '.join(ordered_child_features)})"
+
+        if ordered_child_features:
+            child_value = f"({root_op} {' '.join(ordered_child_features)})"
+        else:
+            child_value = self.m1.value
+
+        if not is_valid_logic_expr(child_value):
+            child_value = self.m1.value
+
         pool_knobs = self.m1.knobs + self.m2.knobs
         unique_pool = {k.symbol: k for k in pool_knobs}
         

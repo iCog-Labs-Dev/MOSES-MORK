@@ -3,7 +3,7 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from Representation.helpers import TreeNode, parse_sexpr, tokenize
+from Representation.helpers import TreeNode, parse_sexpr, tokenize, is_valid_logic_expr
 
 import collections
 import itertools
@@ -110,6 +110,14 @@ class DependencyMiner:
         """Returns a string representation of a node (simplified for mining keys)."""
         return str(node)
 
+    def _is_mineable_key(self, key):
+        clean_key = key.strip()
+        if clean_key == "OR":
+            return True
+        if clean_key in {"AND", "NOT", "(AND)", "(OR)", "(NOT)"}:
+            return False
+        return is_valid_logic_expr(clean_key)
+
     def fit(self, s_expressions, weights):
         """
         Scans the trees specifically looking for SIBLING CO-OCCURRENCES.
@@ -128,10 +136,18 @@ class DependencyMiner:
                 
                 # Only considering non-leaf nodes with multiple children as contexts
                 if not current.is_leaf() and len(current.children) > 1:
+                    
+                    child_keys = [
+                        key for key in (self._get_canonical(c) for c in current.children)
+                        if self._is_mineable_key(key)
+                    ]
+
+                    if len(child_keys) <= 1:
+                        queue.extend(current.children)
+                        continue
+
                     self.total_weighted_contexts += weight
                     self.total_count += 1
-                    
-                    child_keys = [self._get_canonical(c) for c in current.children]
                     
                     # Counting individual occurrences, which aviods duplicates (Mariginal).
                     # We can also use the frequency

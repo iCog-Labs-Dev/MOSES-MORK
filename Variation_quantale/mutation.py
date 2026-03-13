@@ -7,7 +7,8 @@ from Representation.representation import (Quantale, Instance,
                                            Deme, Hyperparams,
                                            knobs_from_truth_table)
 from Representation.csv_parser import load_truth_table
-from Representation.helpers import tokenize, get_top_level_features, isSymbol
+from Representation.helpers import (tokenize, get_top_level_features, isSymbol,
+                                    is_valid_logic_expr)
 from reduct.enf.main import reduce
 from hyperon import MeTTa
 from typing import Any, Set
@@ -94,7 +95,12 @@ class Mutation(Quantale):
                 keep_mask.append(result)
                 
         if not keep_mask:
-             return f"({self.base_op})"
+             return Instance(
+                 value=self.instance_value,
+                 id=random.randint(1000, 9999),
+                 score=0.0,
+                 knobs=list(self.instance.knobs)
+             )
              
         instance_exp = f"({self.base_op} {' '.join(keep_mask)})"
         new_instance = Instance(
@@ -153,7 +159,14 @@ class Mutation(Quantale):
             mutated_feat = self._mutate_expression(feat)
             new_features.append(mutated_feat)
 
-        instance_exp = f"({self.base_op} {' '.join(new_features)})"
+        if not new_features:
+            instance_exp = self.instance_value
+        else:
+            instance_exp = f"({self.base_op} {' '.join(new_features)})"
+
+        if not is_valid_logic_expr(instance_exp):
+            instance_exp = self.instance_value
+
         present_symbols = set(tokenize(instance_exp))
         parent_knobs = {k.symbol: k for k in self.instance.knobs}
         new_knobs = [parent_knobs[sym] for sym in present_symbols if sym in parent_knobs]

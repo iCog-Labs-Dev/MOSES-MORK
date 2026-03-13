@@ -122,12 +122,19 @@ class Instance:
 
 @dataclass
 class Hyperparams:
+    """Tunable controls for search breadth, variation, and recovery behavior."""
     mutation_rate: float
     crossover_rate: float
     num_generations: int
     neighborhood_size: int
+    max_iter: int = 100
+    fg_type: str = "alpha"
     bernoulli_prob: float = 0.5
     uniform_prob: float = 0.5
+    initial_population_size: int = 2
+    exemplar_selection_size: int = 7
+    min_crossover_neighbors: int = 5
+    evidence_propagation_steps: int = 20
 
 class Deme(Quantale):
     def __init__(self, instances: List[Instance], id: str, q_hyper: Hyperparams) -> None:
@@ -160,10 +167,12 @@ class Deme(Quantale):
                         expr = add_arg(expr, knob.symbol)
                         instances.value = expr
             
-            if len(self.instances) == 1:
+            if len(self.instances) < self.q_hyper.initial_population_size:
                 parent = deepcopy(self.instances[0])
-                new_instance = sample_random_instances(parent, self.q_hyper)
-                self.instances.append(new_instance)
+                missing_instances = self.q_hyper.initial_population_size - len(self.instances)
+                for _ in range(missing_instances):
+                    new_instance = sample_random_instances(parent, self.q_hyper)
+                    self.instances.append(new_instance)
             
             # self.factor_graph = build_factor_graph_from_deme(self)
         # TODO: have pattern miner to extract new dependencies between instances and update the factor graph
@@ -231,20 +240,29 @@ def sample_random_instances(instance: Instance, hyperparams: Hyperparams) -> Ins
     return child
 
   
-def knobs_from_truth_table(ITable: List[dict]) -> List[Knob]:
+def knobs_from_truth_table(ITable: List[dict], exclude: List[str] = None) -> List[Knob]:
     """
     Given a truth table (list of dict rows), extract:
       - unique symbols (keys)
       - unique values per symbol
     and instantiate Knob objects.
+    
+    Args:
+        ITable: List of dictionaries representing truth table rows
+        exclude: List of column names to exclude (e.g., ['O'] for output column)
     """
     if not ITable:
         return []
+    
+    if exclude is None:
+        exclude = []
 
     values_by_key: dict[str, list[bool]] = {}
 
     for row in ITable:
         for key, val in row.items():
+            if key in exclude:
+                continue
             if key not in values_by_key:
                 values_by_key[key] = []
             
